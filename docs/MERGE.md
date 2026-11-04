@@ -33,7 +33,7 @@ ghostlock-suite/
 | `app_name` 字符串合并覆盖 | GhostKey 改用独立 `ghostkey_name`（MainScreen 标题引用同步更新） |
 | 图标资源重复（ic_launcher_foreground 等） | 删除 library 侧未引用的 launcher mipmap/drawable |
 | 签名 | 移除 GhostKey 自带 release 签名配置（keystore 本就不入库），统一用外壳 `local.properties` 的 KEYSTORE_* 签名链 |
-| R8 keep 规则 | GhostKey 的 proguard-rules.pro 改为 `consumerProguardFiles` 随 library 下发，外壳 release R8 自动消费（Shizuku UserService / AIDL / ViewModel keep） |
+| R8 keep 规则 | GhostKey 的 proguard-rules.pro 改为 `consumerProguardFiles` 随 library 下发，外壳 release R8 自动消费（Shizuku UserService / AIDL / ViewModel keep）。全局选项（`-repackageclasses`/`-allowaccessmodification`/`-assumenosideeffects`）不能出现在 consumer 规则里（AGP `exportReleaseConsumerProguardFiles` 会直接失败），统一搬到 `app/proguard-rules.pro` |
 | ABI | 外壳 `splits.abi` 已限定 arm64-v8a；library 增加 `ndk.abiFilters += "arm64-v8a"` 与之对齐 |
 | AGP/Kotlin 版本 | 统一为外壳的 AGP 9.1.0 + Kotlin 2.4.20；library 弃用 `kotlinOptions`，改用 `jvmToolchain(21)` |
 

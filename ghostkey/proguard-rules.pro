@@ -1,5 +1,11 @@
 # ============================================================
-# GhostKey R8 混淆规则（方案：kernel-adaptation-plan-final.md 第九/十三章）
+# GhostKey R8 keep 规则（方案：kernel-adaptation-plan-final.md 第九/十三章）
+# 本文件经 consumerProguardFiles 随 AAR 下发给宿主 App 的 R8。
+# 注意：consumer 规则里不允许出现全局选项（-allowaccessmodification /
+# -repackageclasses / -assumenosideeffects 等），AGP 会在
+# :ghostkey:exportReleaseConsumerProguardFiles 校验时直接失败
+# （"Global keep option ... should not be used in a consumer configuration
+# file"）。这些全局优化项统一由宿主 App 的 app/proguard-rules.pro 持有。
 # ============================================================
 
 # ===== 保留规则 =====
@@ -21,16 +27,3 @@
 
 # 反射/泛型安全所需的属性（Kotlin 反射、协程、Compose 均依赖）
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
-
-# ===== 混淆规则 =====
-
-# 混淆所有其他类名/方法名，并统一重打包到根包，缩短标识符
--repackageclasses ''
--allowaccessmodification
-
-# ===== 日志裁剪 =====
-# 移除 verbose / debug 日志调用（release 瘦身 + 降噪；i/w/e 保留便于排障）
--assumenosideeffects class android.util.Log {
-    public static int v(...);
-    public static int d(...);
-}
