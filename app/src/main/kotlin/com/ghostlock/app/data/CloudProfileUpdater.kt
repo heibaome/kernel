@@ -136,7 +136,7 @@ internal class CloudProfileUpdater(
         /* The pre-release asset the CI uploads; used when no custom source is
          * configured. */
         const val DefaultSource =
-            "https://github.com/YuKongA/ghostlock-app/releases/download/pre-release/GhostLock-kernel-profiles.zip"
+            "https://github.com/heibaome/kernel/releases/download/pre-release/GhostLock-kernel-profiles.zip"
         const val PrefCloudProfileSource = "cloud_profile_source"
         const val PrefCloudProfileFiles = "cloud_profile_files"
         const val MaxPackBytes = 32L * 1024 * 1024
