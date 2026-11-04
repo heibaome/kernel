@@ -62,8 +62,17 @@ jobs:
       # （ghostlock 的 make/cargo 链仍走 ONDK，互不影响）
       - name: Set up Android SDK components for :ghostkey
         run: |
-          yes | sdkmanager --install "cmake;3.22.1" "ndk;28.2.13676358" > /dev/null
-          sdkmanager --list_installed | grep -E "cmake|ndk" || true
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMGR="$(command -v sdkmanager || find "$SDK_ROOT" /usr/local/lib/android -type f -name sdkmanager 2>/dev/null | head -1)"
+          if [ -z "$SDKMGR" ]; then
+            echo "sdkmanager not found; ANDROID_SDK_ROOT=$SDK_ROOT" >&2
+            find / -maxdepth 7 -type f -name sdkmanager 2>/dev/null | head -5 >&2
+            exit 1
+          fi
+          echo "sdkmanager: $SDKMGR (sdk root: $SDK_ROOT)"
+          yes | "$SDKMGR" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --sdk_root="$SDK_ROOT" --install "cmake;3.22.1" "ndk;28.2.13676358"
+          "$SDKMGR" --sdk_root="$SDK_ROOT" --list_installed | grep -E "cmake|ndk"
 
       - name: Cache ONDK
         id: ondk-cache
