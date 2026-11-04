@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- v1.0.9：KSUD_STAGE 需扫描全部已装应用找「带 libksud.so 的管理器」，
+         自编译 fork 包名不可预知，用 QUERY_ALL_PACKAGES 保证包可见性。 -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <!-- Shizuku 13.x 的 API 权限：声明后才能走 Shizuku 授权流程（请求/校验权限） -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API" />
+
+    <!-- Android 11+ 需要显式声明才能查询对应包信息（否则 getPackageInfo 会因包可见性过滤抛 NameNotFoundException） -->
+    <queries>
+        <package android:name="moe.shizuku.privileged.api" />
+        <!-- Phase 6：Root 管理器检测（KsuResolver）需要的包可见性 -->
+        <package android:name="me.weishu.kernelsu" />
+        <package android:name="com.rifsxd.ksunext" />
+        <package android:name="me.weishu.kernelsu.next" />
+        <package android:name="com.topjohnwu.magisk" />
+        <package android:name="io.github.vvb2060.magisk" />
+        <package android:name="me.bmax.apatch" />
+    </queries>
+
+    <application>
+        <!-- 合并说明：
+             1. 作为 library 模块并入 GhostLock 外壳后，本模块不再声明
+                android:name/icon/label/theme 等 application 级属性，
+                统一使用外壳 (com.ghostlock.app) 的 GhostlockApplication 与主题。
+             2. ShizukuProvider 由外壳 App 的 Manifest 声明
+                (authorities = ${applicationId}.shizuku)，此处去掉重复声明，
+                否则 manifest merger 会因 provider authority 冲突直接失败。
+             3. 原 LAUNCHER 入口 MainActivity 改名为 GhostKeyActivity，
+                去掉 intent-filter，由外壳首页卡片跳转进入。 -->
+        <activity
+            android:name=".ui.GhostKeyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CVE98260"
+            tools:ignore="Instantiatable" />
+
+        <service
+            android:name=".shizuku.Cve98260UserService"
+            android:exported="false" />
+
+    </application>
+
+</manifest>

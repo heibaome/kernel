@@ -1,0 +1,91 @@
+# GhostLock Suite — 合并说明
+
+将 **GhostLock**（[YuKongA/ghostlock-app](https://github.com/YuKongA/ghostlock-app)，CVE-2026-43499）与 **GhostKey**（[Again1996-bit/CVE-2026-98260-GhostKey](https://github.com/Again1996-bit/CVE-2026-98260-GhostKey)，CVE-2026-98260）合并进同一个 Android APK 外壳。
+
+**外壳 UI 完全沿用 GhostLock 的设计语言**（Miuix KM 组件库：Scaffold / TopAppBar / Card / PressFeedbackType.Tilt），新增统一首页 `SuiteHomeUI`，以两张模块卡片分发进入两个提权工具。
+
+> ⚠️ 仅供设备所有者授权下的安全研究使用，两个上游项目的原始许可与免责声明继续适用（GhostLock: Apache-2.0；GhostKey: 详见其 README 安全声明）。
+
+## 模块结构
+
+```
+ghostlock-suite/
+├── app/            # 外壳（com.ghostlock.app）＝原 ghostlock-app，新增 SuiteHomeUI 首页
+├── ghostkey/       # 新 library 模块（com.GhostKey.app）＝原 GhostKey App
+│                   #   入口 MainActivity → GhostKeyActivity（去 LAUNCHER）
+├── profile-core/   # 原 ghostlock-app 的 profile 导出 JVM 模块
+├── src/            # GhostLock native exploit（C++23，make 构建 → libghostlock.so）
+├── tools/          # ghostlock-extract（Rust → libextract.so）
+```
+
+启动流程：外壳 MainActivity（唯一 LAUNCHER）→ `SuiteHomeUI` 首页 →
+- 点 **GhostLock** 卡片 → 进原 GhostlockUI（返回键回首页）
+- 点 **GhostKey** 卡片 → `startActivity(GhostKeyActivity)`，其内部 Compose/Material3 界面保持原有功能与终端观感
+
+## 已解决的合并冲突
+
+| 冲突点 | 处理 |
+|---|---|
+| 双 LAUNCHER MainActivity | GhostKey 的入口改名为 `GhostKeyActivity`，去掉 intent-filter；外壳成为唯一启动入口 |
+| 双 `ShizukuProvider`（authorities `${applicationId}.shizuku` 重复，merger 必炸） | 仅保留外壳 App 的 provider 声明；两模块各自经 `Shizuku.bindUserService` 绑定自己的 UserService，互不影响 |
+| 双 Application 类 | 删除 `Cve98260Application`（其 binder listener 均为空实现，纯 no-op）；统一使用 `GhostlockApplication`。`ExploitViewModel(AndroidViewModel)` 走默认工厂，不依赖原 Application |
+| assets 同名冲突（`kernel_profiles/index.conf` 等 3 个文件） | GhostKey 资产目录改名 `kernel_profiles` → `ghostkey_kernel_profiles`，`BuiltinProfileCatalog.DIR` 同步更新 |
+| `app_name` 字符串合并覆盖 | GhostKey 改用独立 `ghostkey_name`（MainScreen 标题引用同步更新） |
+| 图标资源重复（ic_launcher_foreground 等） | 删除 library 侧未引用的 launcher mipmap/drawable |
+| 签名 | 移除 GhostKey 自带 release 签名配置（keystore 本就不入库），统一用外壳 `local.properties` 的 KEYSTORE_* 签名链 |
+| R8 keep 规则 | GhostKey 的 proguard-rules.pro 改为 `consumerProguardFiles` 随 library 下发，外壳 release R8 自动消费（Shizuku UserService / AIDL / ViewModel keep） |
+| ABI | 外壳 `splits.abi` 已限定 arm64-v8a；library 增加 `ndk.abiFilters += "arm64-v8a"` 与之对齐 |
+| AGP/Kotlin 版本 | 统一为外壳的 AGP 9.1.0 + Kotlin 2.4.20；library 弃用 `kotlinOptions`，改用 `jvmToolchain(21)` |
+
+## 构建
+
+环境要求与 ghostlock-app 一致：Android SDK（compileSdk 37）+ NDK（或 ONDK）+ CMake 3.22.1 + aarch64 Rust target（libextract）。
+
+```bash
+# local.properties 需配置 sdk.dir / ndk.dir（或 ONDK），以及可选 KEYSTORE_*
+./gradlew assembleRelease
+# 产物：app/build/outputs/apk/arm64/release/*-arm64-v8a-release.apk
+```
+
+如需单独跑 GhostKey 的 JVM 单测：`./gradlew :ghostkey:testDebugUnitTest`
+
+## GitHub Actions 自动打包
+
+沿用仓库自带的 `.github/workflows/build.yml`（原 ghostlock-app CI：ONDK 一体化 NDK+Rust、三平台 extractor、prerelease 自动发布、Telegram 通知），针对合并工程做了以下适配：
+
+1. **新增 `Set up Android SDK components for :ghostkey`**：`:ghostkey` 模块的 `externalNativeBuild(cmake)` 需要 SDK 侧 `cmake;3.22.1`（ONDK 不含 CMake）与 AGP 9.1 默认 `ndk;28.2.13676358`（两个版本号已对照 Google 官方仓库索引 repository2-3.xml 实锤存在）。ghostlock 的 make/cargo 链仍走 ONDK，互不影响。
+2. **APK 输出路径**：`splits.abi = arm64-v8a` 使输出落在 `build/app/outputs/apk/arm64/release/`，rename 步骤的 glob 已同步修正。
+3. **命名/文案**：APK 与 artifact 改名 `GhostLock-Suite-release`，prerelease notes 标题与文件清单同步（release notes 生成、sha256 循环、动态遍历 artifacts 的 Telegram 脚本均已核对一致）。
+4. 触发器/缓存/secrets 原样保留：`SIGNING_KEY`、`KEY_STORE_PASSWORD`、`ALIAS`、`KEY_PASSWORD` 四个 secrets 配置后 main 分支自动正式签名，否则 debug 签名 fallback。
+
+## 竞态审查（合并后专项）
+
+同进程后两个提权模块共享的「状态」边界发生变化，已逐项审查：
+
+| # | 问题 | 性质 | 处置 |
+|---|---|---|---|
+| 1 | 两模块同用 `filesDir/user_profiles/`：GL 的 UserProfileStore 列出目录下**所有文件**（不筛扩展名）并解析 release，GK 写入 `user-<release>.conf`（不同 CVE 的偏移 schema）→ 互相把对方的提权偏移表当成本模块 profile 套用 | **确定性数据污染**（非概率性，必发） | 已修：GK 目录改 `ghostkey_user_profiles/`、`ghostkey_run_logs/`，与外壳隔离 |
+| 2 | Shizuku 权限请求码两侧同是 `4815`：同进程共享 Shizuku 静态 listener 注册表，同码请求会互相覆盖 pending 授权流 | 真竞态 | 已修：GK 改 `REQUEST_CODE = 9826`，GL 保持 4815 |
+| 3 | 运行互斥只看自己（GL `if(running)` / GK `if(isRunning)`），外壳 back 又允许运行中切回首页 → 两个内核 exploit（PI-futex 与 UAF）可并发攻击同一内核：堆布局互相破坏、GL W1 的 SELinux 全局翻转中途改变 GK 校准环境、双 KernelSU handoff 时两个 ksud 抢状态 | 真竞态 | 已修（双向 UI 互斥）：首页在 GL running 时禁用 GK 卡（置灰+提示）；GK MainScreen 在 isRunning 时拦截返回键，防 native exploit 孤儿化。仍可用 Home 键绕过，见残余风险 |
+| 4 | 顺序执行下的环境依赖：GL 成功后 KernelSU 常驻会改变 Shizuku uid 模式（shell→root），GK 的 shell uid=2000 前提变化 | 环境依赖（非并发） | 未修：需真机验证 GK 在 KernelSU 已常驻环境下的行为 |
+
+> UI 互斥说明：Miuix Card 0.9.4 无 enabled 参数（源码已核），禁用态用 onClick=null + 压灰背景实现。
+
+## 残余风险 / 待真机验证
+
+1. **UI 互斥非强制隔离**：用户可用 Home 键/通知栏绕过外壳首页，两 exploit 理论上仍可并发；根治需内核级/设备级约束，当前靠 UI 拦截 + 本文档警示。**同一设备上禁止并发执行两个模块**：两 exploit 的堆风水假设互斥，SELinux 是全局状态，双 ksud handoff 会争抢 /data/adb 状态。
+2. **KernelSU 常驻后的跨模块行为**：GL 提权成功→KernelSU 常驻后，GK 的 Shizuku 探测（uid 模式）与 PrivilegeGate 行为需真机验证。另需验证顺序执行：GL handoff 后再跑 GK，其 KsudStage 对已运行的 ksud 是否幂等。
+3. **Compose 版本仲裁**：外壳直接依赖 compose 1.12.1（Miuix 0.9.4 要求），GhostKey 经 BOM 2024.10 引入 material3 1.3.x。Gradle 会仲裁到高版本 runtime，Compose 官方保证旧库对新 runtime 的前向二进制兼容，但建议真机过一遍 GhostKey 全部页面（执行 / 日志 / 设置 / profile 导入导出）。若出现 Material3 崩溃，把 `:ghostkey` 的 BOM 升到与 1.12 对齐的版本即可。
+2. **双 Shizuku UserService 共存**：两个 service 类与 AIDL 包名不同，理论上无冲突；建议在同一设备上先后跑通两个模块的 Shizuku 授权路径。
+3. 本仓库未做过完整 Gradle 构建（合并为源码级交付），首次构建如遇资源/资产遗漏，优先检查上文冲突清单。
+4. GhostLock 的 native（make + Rust）构建链未动，按原项目文档操作。
+
+## 与原项目的差异清单（快速 diff 定位）
+
+- `settings.gradle.kts`：+`:ghostkey`，rootProject.name → `GhostLock Suite`
+- `build.gradle.kts`（根）：注册 `com.android.library` / `org.jetbrains.kotlin.android` 插件版本
+- `app/build.gradle.kts`：+`implementation(project(":ghostkey"))`
+- `app/ui/MainActivity.kt`：接入 SuiteHomeUI 路由（rememberSaveable + BackHandler）
+- `app/ui/SuiteHomeUI.kt`：新增（Miuix 首页）
+- `app/res/values*/strings.xml`：新增 suite_home_* / module_* 字符串（en/zh/pt）
+- `ghostkey/`：见上表（build.gradle.kts 重写为 library、Manifest 瘦身、入口改名、资产改名、Application 删除）
