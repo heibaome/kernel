@@ -191,6 +191,9 @@ jobs:
   build-extractor-macos:
     name: Build Extractor (macOS)
     runs-on: macos-latest
+    # macOS runner 长期排队/幽灵 in_progress（曾把整个 run 卡住 30 分钟以上），
+    # 它只是可选产物：失败或超时不得拖垮发版与其它产物。
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -262,7 +265,9 @@ jobs:
 
   prerelease:
     name: Pre-release
-    needs: [build-apk, build-extractor-macos, build-extractor-windows]
+    # 只等"必须"的产物：APK 与 Windows 提取器。macOS 提取器是可选项
+    # （continue-on-error），不参与 needs，否则 macOS runner 排队会把发版一起卡死。
+    needs: [build-apk, build-extractor-windows]
     runs-on: ubuntu-latest
     if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.ref_type != 'tag' }}
     permissions:
@@ -370,7 +375,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   post_telegram:
-    needs: [build-apk, build-extractor-macos, build-extractor-windows]
+    # 同上：不依赖 macOS 可选产物，避免通知任务排在 macOS runner 后面。
+    needs: [build-apk, build-extractor-windows]
     runs-on: ubuntu-latest
     if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.ref_type != 'tag' }}
     steps:
