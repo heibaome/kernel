@@ -118,9 +118,18 @@ jobs:
         run: |
           "${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all build/native/ghostlock || true
 
-      # splits.abi = arm64-v8a（非 universal）→ APK 输出在 apk/arm64/release/ 下
+      # splits.abi = arm64-v8a（非 universal）→ APK 落在 app/build/outputs/apk/arm64/release/
+      # 用 find 定位而不是写死路径：模块 build 目录与 archivesName 命名都可能变。
       - name: Rename Release APK
-        run: mv build/app/outputs/apk/arm64/release/*-release.apk GhostLock-Suite-release.apk
+        run: |
+          APK=$(find . -type f -path '*/outputs/apk/*' -name '*-release.apk' | sort | head -1)
+          if [ -z "$APK" ]; then
+            echo "no *-release.apk under */outputs/apk/*" >&2
+            find . -type f -name '*.apk' -not -path './.git/*' | head -20 >&2
+            exit 1
+          fi
+          echo "apk: $APK ($(stat -c%s "$APK") bytes)"
+          mv "$APK" GhostLock-Suite-release.apk
 
       - name: Prepare extractor binaries
         run: |
