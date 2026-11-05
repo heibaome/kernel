@@ -11,7 +11,7 @@
     <string name="about_source_code">源代码</string>
     <string name="about_origins">项目来源</string>
     <string name="about_open_source">开源许可证</string>
-    <string name="opensource_info">版权所有 © 2026 YuKongA</string>
+    <string name="opensource_info">版权所有 © 2026 heibaome · 基于 GhostLock（YuKongA，Apache-2.0）</string>
     <string name="action_import_offsets_conf">导入 offsets.conf（v2）</string>
     <string name="action_import_offsets_json">导入 offsets.json（v1）</string>
     <string name="action_parse_ota">解析完整包链接</string>

@@ -166,7 +166,7 @@
 <string name="manager_show_all">Mostrar todos os aplicativos</string>
 <string name="manager_summary_auto">Automático (recomendado)</string>
 <string name="offsets_already_exist">Os deslocamentos já existem (integrados)</string>
-<string name="opensource_info">Direitos autorais © 2026 YuKongA</string>
+<string name="opensource_info">Direitos autorais © 2026 heibaome · Baseado em GhostLock por YuKongA (Apache-2.0)</string>
 <string name="override_export">Exportar configuração</string>
 <string name="override_export_done">Configuração exportada</string>
 <string name="override_summary">Edite os parâmetros do perfil carregado</string>

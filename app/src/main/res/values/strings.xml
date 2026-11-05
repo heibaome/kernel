@@ -11,7 +11,7 @@
     <string name="about_source_code">Source code</string>
     <string name="about_origins">Project origins</string>
     <string name="about_open_source">Open source licenses</string>
-    <string name="opensource_info">Copyright © 2026 YuKongA</string>
+    <string name="opensource_info">Copyright © 2026 heibaome · Based on GhostLock by YuKongA (Apache-2.0)</string>
     <string name="action_import_offsets_conf">Import offsets.conf (v2)</string>
     <string name="action_import_offsets_json">Import offsets.json (v1)</string>
     <string name="action_parse_ota">Parse OTA link</string>
