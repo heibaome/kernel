@@ -9,6 +9,7 @@ import com.ghostlock.app.domain.model.OffsetCandidate
 import com.ghostlock.app.domain.model.OffsetImportResult
 import com.ghostlock.app.domain.model.ParseResult
 import com.ghostlock.app.domain.model.ProfileConfig
+import com.ghostlock.app.domain.model.ShizukuStatus
 import com.ghostlock.app.domain.model.UserProfileFile
 
 interface GhostlockRepository {
@@ -22,6 +23,9 @@ interface GhostlockRepository {
     fun setForceAttackTest(enabled: Boolean)
 
     fun setShizukuEnabled(enabled: Boolean)
+
+    /** Live Shizuku status for the active engine path (no snapshot round-trip). */
+    fun shizukuStatus(): ShizukuStatus
 
     /** User-chosen manager package, or null for auto-detect. */
     fun selectedManagerPackage(): String?

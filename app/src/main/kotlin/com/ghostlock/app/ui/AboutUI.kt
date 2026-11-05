@@ -149,8 +149,8 @@ internal fun AboutScreen(onBack: () -> Unit) {
             item(key = "source") {
                 AboutLink(
                     title = stringResource(R.string.about_source_code),
-                    summary = "github.com/YuKongA/ghostlock-app",
-                    onClick = { uriHandler.openUri("https://github.com/YuKongA/ghostlock-app") },
+                    summary = "github.com/heibaome/kernel",
+                    onClick = { uriHandler.openUri("https://github.com/heibaome/kernel") },
                 )
             }
             item(key = "origins-title") {

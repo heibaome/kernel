@@ -29,6 +29,7 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -51,6 +52,11 @@ sealed interface GhostlockEffect {
 }
 
 private const val OverwriteSummaryLimit = 12
+
+/* Post-grant Shizuku polling window: covers the grant dialog and grants made
+ * from the Shizuku manager app (which emit no in-process callback). */
+private const val SHIZUKU_POLL_ATTEMPTS = 12
+private const val SHIZUKU_POLL_INTERVAL_MS = 500L
 
 enum class DocumentRequest {
     ImportOffsetsHocon, ImportOffsetsJson, BootImage, XblImage, PayloadImage, UefiImage,
@@ -167,6 +173,27 @@ class GhostlockViewModel(
 
     fun refreshAccessStatus() {
         if (initialized) viewModelScope.launch { refreshSnapshot() }
+        /* In GhostKey mode refreshSnapshot would overwrite the card with the
+         * GhostLock runner's status; refresh the bridge's status instead. */
+        if (state.value.engine == ExploitEngine.GHOSTKEY) refreshGhostKeyStatus()
+    }
+
+    /**
+     * Shizuku's permission-grant callback does not fire on every grant path
+     * (e.g. granting from the Shizuku manager app), so after sending a
+     * request, poll the live status briefly until it flips to READY.
+     */
+    private fun pollShizukuUntilReady() {
+        viewModelScope.launch {
+            repeat(SHIZUKU_POLL_ATTEMPTS) {
+                delay(SHIZUKU_POLL_INTERVAL_MS)
+                if (state.value.shizukuStatus == ShizukuStatus.READY) return@launch
+                val status = runCatching { repository.shizukuStatus() }
+                    .getOrDefault(ShizukuStatus.NOT_RUNNING)
+                mutableState.update { it.copy(shizukuStatus = status) }
+                if (status == ShizukuStatus.READY) return@launch
+            }
+        }
     }
 
     /* profile-ui: the controller owns loading, merging and persistence. */
@@ -948,6 +975,7 @@ class GhostlockViewModel(
         // The grant dialog lands in another app, so the status is re-read and
         // onResume() refreshes it again when the dialog closes.
         viewModelScope.launch { refreshSnapshot() }
+        if (enabled) pollShizukuUntilReady()
     }
 
     fun onOpenManagerPicker() {
@@ -1021,6 +1049,7 @@ class GhostlockViewModel(
                 ShizukuStatus.PERMISSION_REQUIRED -> {
                     ghostKeyBridge.requestShizukuPermission()
                     refreshGhostKeyStatus()
+                    pollShizukuUntilReady()
                 }
                 ShizukuStatus.NOT_REQUIRED,
                 ShizukuStatus.READY,
@@ -1033,7 +1062,10 @@ class GhostlockViewModel(
         if (!snapshot.shizukuEnabled) return
         when (snapshot.shizukuStatus) {
             ShizukuStatus.NOT_RUNNING -> send(GhostlockEffect.OpenShizuku)
-            ShizukuStatus.PERMISSION_REQUIRED -> repository.requestShizukuPermission()
+            ShizukuStatus.PERMISSION_REQUIRED -> {
+                repository.requestShizukuPermission()
+                pollShizukuUntilReady()
+            }
             ShizukuStatus.NOT_REQUIRED,
             ShizukuStatus.READY,
                 -> Unit

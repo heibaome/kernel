@@ -19,6 +19,7 @@ import com.ghostlock.app.data.ota.OtaPayloadExtractor
 import com.ghostlock.app.domain.model.OffsetImportResult
 import com.ghostlock.app.domain.model.ParseResult
 import com.ghostlock.app.domain.model.ProfileConfig
+import com.ghostlock.app.domain.model.ShizukuStatus
 import com.ghostlock.app.domain.model.UserProfileFile
 import com.ghostlock.app.domain.repository.GhostlockRepository
 import com.ghostlock.app.domain.repository.ProfileConfigController
@@ -580,6 +581,8 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
     }
 
     override fun requestShizukuPermission() = shizukuRunner.requestPermission()
+
+    override fun shizukuStatus(): ShizukuStatus = shizukuRunner.status()
 
     override fun setShizukuStatusListener(listener: (() -> Unit)?) =
         shizukuRunner.setStatusListener(listener)
