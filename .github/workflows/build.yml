@@ -105,7 +105,11 @@ jobs:
             exit 1
           fi
           if ! keytool -list -keystore keystore.jks -storepass "${{ secrets.KEY_STORE_PASSWORD }}" >/dev/null 2>&1; then
-            echo "::error::SIGNING_KEY decoded to $SIZE bytes but keytool cannot open it: KEY_STORE_PASSWORD is wrong, or the base64 contains stray line breaks/spaces, or KEY_ALIAS does not exist in the keystore."
+            echo "::error::SIGNING_KEY decoded to $SIZE bytes but keytool cannot open it: KEY_STORE_PASSWORD is wrong, or the base64 contains stray line breaks/spaces."
+            exit 1
+          fi
+          if [ -z "${{ secrets.KEY_ALIAS }}" ] || ! keytool -list -keystore keystore.jks -storepass "${{ secrets.KEY_STORE_PASSWORD }}" -alias "${{ secrets.KEY_ALIAS }}" >/dev/null 2>&1; then
+            echo "::error::KEY_ALIAS is empty or not found in the keystore. Set the KEY_ALIAS secret to the exact alias used by keytool (must also match KEY_PASSWORD)."
             exit 1
           fi
           echo "Release signing certificate fingerprint:"
@@ -125,7 +129,7 @@ jobs:
           export NDK_ROOT="$ONDK_HOME"
           export KEYSTORE_PATH="../keystore.jks"
           export KEYSTORE_PASS="${{ secrets.KEY_STORE_PASSWORD }}"
-          export KEY_ALIAS="${{ secrets.ALIAS }}"
+          export KEY_ALIAS="${{ secrets.KEY_ALIAS }}"
           export KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           ./gradlew :app:assembleRelease --no-daemon
 
