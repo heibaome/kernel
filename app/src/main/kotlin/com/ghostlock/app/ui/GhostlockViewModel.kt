@@ -1017,7 +1017,11 @@ class GhostlockViewModel(
 
     /** 引擎切换（非运行态才可切换；GhostKey 强制依赖 Shizuku，切换时自动开启）。 */
     fun onEngineSelected(engine: ExploitEngine) {
-        if (running || engine == state.value.engine) return
+        if (engine == state.value.engine) return
+        if (running) {
+            send(GhostlockEffect.Toast(R.string.engine_switch_locked))
+            return
+        }
         engineUserSelected = true
         mutableState.update {
             it.copy(

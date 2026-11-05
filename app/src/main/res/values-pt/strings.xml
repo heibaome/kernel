@@ -275,6 +275,7 @@ Substituí-los pelos novos valores?"</string>
     <string name="module_running_summary">Executando…</string>
     <string name="module_busy_other_running">Ocupado: exploit GhostLock em andamento. Aguarde antes de iniciar GhostKey.</string>
     <string name="engine_label">Motor de exploração</string>
+    <string name="engine_switch_locked">Motor bloqueado enquanto um exploit está em execução</string>
     <string name="engine_ghostlock">GhostLock (CVE-2026-43499)</string>
     <string name="engine_ghostlock_summary">exploit de kernel PI-futex · cadeia W1/W2/W3</string>
     <string name="engine_ghostkey">GhostKey (CVE-2026-98260)</string>

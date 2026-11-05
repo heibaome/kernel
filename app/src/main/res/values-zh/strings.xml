@@ -274,6 +274,7 @@
     <string name="module_busy_other_running">占用中：GhostLock 提权执行中，完成后才能启动 GhostKey。</string>
     <!-- 双引擎选择器（GhostLock / GhostKey） -->
     <string name="engine_label">提权引擎</string>
+    <string name="engine_switch_locked">执行中，无法切换引擎</string>
     <string name="engine_ghostlock">GhostLock（CVE-2026-43499）</string>
     <string name="engine_ghostlock_summary">PI-futex 内核提权 · W1/W2/W3 链</string>
     <string name="engine_ghostkey">GhostKey（CVE-2026-98260）</string>

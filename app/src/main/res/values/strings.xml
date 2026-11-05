@@ -274,6 +274,7 @@
     <string name="suite_home_footer">For authorized security research on devices you own only.</string>
     <!-- Dual-engine selector (GhostLock / GhostKey) -->
     <string name="engine_label">Exploit engine</string>
+    <string name="engine_switch_locked">Engine is locked while an exploit is running</string>
     <string name="engine_ghostlock">GhostLock (CVE-2026-43499)</string>
     <string name="engine_ghostlock_summary">PI-futex kernel exploit · W1/W2/W3 chain</string>
     <string name="engine_ghostkey">GhostKey (CVE-2026-98260)</string>
