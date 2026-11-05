@@ -18,24 +18,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghostlock.app.R
 import kotlinx.coroutines.delay
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.basic.Check
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 15 秒不可跳过的风险确认：倒计时走完 + 勾选同意后才能确认；
  * 点外部与返回键无效（onDismissRequest 为空），只能通过按钮取消或确认。
+ * 组件与配色沿用应用现有对话框体系（OverlayDialog + TextButton 行 + 原生 Checkbox）。
  */
 @Composable
 fun RiskConfirmDialog(
@@ -56,26 +54,19 @@ fun RiskConfirmDialog(
     OverlayDialog(
         show = true,
         title = stringResource(R.string.risk_confirm_title),
+        /* 功能针对性风险说明走 summary 槽位，与现有对话框层次一致。 */
+        summary = when (kind) {
+            RiskConfirmKind.FORCE_ATTACK -> stringResource(R.string.risk_body_force)
+            RiskConfirmKind.ADVANCED_OVERRIDE -> stringResource(R.string.risk_body_override)
+            RiskConfirmKind.BUILTIN_PROFILE -> stringResource(
+                R.string.risk_body_builtin,
+                state.riskPendingRelease ?: "?",
+            )
+        },
         /* 不可跳过：点外部/返回不关闭，仅按钮可退出。 */
         onDismissRequest = {},
         content = {
             Column {
-                Text(
-                    text = when (kind) {
-                        RiskConfirmKind.FORCE_ATTACK ->
-                            stringResource(R.string.risk_body_force)
-                        RiskConfirmKind.ADVANCED_OVERRIDE ->
-                            stringResource(R.string.risk_body_override)
-                        RiskConfirmKind.BUILTIN_PROFILE ->
-                            stringResource(
-                                R.string.risk_body_builtin,
-                                state.riskPendingRelease ?: "?",
-                            )
-                    },
-                    fontSize = 14.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.size(10.dp))
                 Text(
                     text = stringResource(R.string.risk_confirm_disclaimer),
                     fontSize = 13.sp,
@@ -92,22 +83,15 @@ fun RiskConfirmDialog(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (agreed) {
-                            Icon(
-                                imageVector = MiuixIcons.Basic.Check,
-                                contentDescription = null,
-                                tint = MiuixTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        } else {
-                            Spacer(Modifier.size(20.dp))
-                        }
+                        Checkbox(
+                            checked = agreed,
+                            onCheckedChange = { agreed = it },
+                        )
                         Text(
                             text = stringResource(R.string.risk_confirm_agree),
                             fontSize = 14.sp,
-                            fontWeight = if (agreed) FontWeight.SemiBold else FontWeight.Normal,
                             color = MiuixTheme.colorScheme.onSurface,
                         )
                     }
