@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+/* CI note: release builds fail fast when the SIGNING_KEY secret is missing. */
+
 pluginManagement {
     repositories {
         google {
