@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 合并进 GhostLock 外壳后，为避免与外壳 app 的 app_name 资源合并冲突，
-         改用独立命名；GhostKey 页内标题使用它。 -->
-    <string name="ghostkey_name">GhostKey</string>
-</resources>

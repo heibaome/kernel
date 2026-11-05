@@ -24,20 +24,11 @@
 
     <application>
         <!-- 合并说明：
-             1. 作为 library 模块并入 GhostLock 外壳后，本模块不再声明
-                android:name/icon/label/theme 等 application 级属性，
-                统一使用外壳 (com.ghostlock.app) 的 GhostlockApplication 与主题。
+             1. 作为 library 模块并入 GhostLock 主 UI 后，本模块不再声明任何
+                Activity/主题/图标——引擎全部经 GhostKeyEngineBridge 在主界面内驱动。
              2. ShizukuProvider 由外壳 App 的 Manifest 声明
                 (authorities = ${applicationId}.shizuku)，此处去掉重复声明，
-                否则 manifest merger 会因 provider authority 冲突直接失败。
-             3. 原 LAUNCHER 入口 MainActivity 改名为 GhostKeyActivity，
-                去掉 intent-filter，由外壳首页卡片跳转进入。 -->
-        <activity
-            android:name=".ui.GhostKeyActivity"
-            android:exported="false"
-            android:theme="@style/Theme.CVE98260"
-            tools:ignore="Instantiatable" />
-
+                否则 manifest merger 会因 provider authority 冲突直接失败。 -->
         <service
             android:name=".shizuku.Cve98260UserService"
             android:exported="false" />

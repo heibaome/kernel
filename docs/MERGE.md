@@ -1,8 +1,8 @@
 # GhostLock Suite — 合并说明
 
-将 **GhostLock**（[YuKongA/ghostlock-app](https://github.com/YuKongA/ghostlock-app)，CVE-2026-43499）与 **GhostKey**（[Again1996-bit/CVE-2026-98260-GhostKey](https://github.com/Again1996-bit/CVE-2026-98260-GhostKey)，CVE-2026-98260）合并进同一个 Android APK 外壳。
+将 **GhostLock**（[YuKongA/ghostlock-app](https://github.com/YuKongA/ghostlock-app)，CVE-2026-43499）与 **GhostKey**（[Again1996-bit/CVE-2026-98260-GhostKey](https://github.com/Again1996-bit/CVE-2026-98260-GhostKey)，CVE-2026-98260）合并进同一个 Android APK。
 
-**外壳 UI 完全沿用 GhostLock 的设计语言**（Miuix KM 组件库：Scaffold / TopAppBar / Card / PressFeedbackType.Tilt），新增统一首页 `SuiteHomeUI`，以两张模块卡片分发进入两个提权工具。
+**形态（v2，引擎融合）**：GhostLock 原界面是唯一 UI。主界面 ControlPanel 新增引擎二选一（`EngineCard`：GhostLock / GhostKey，默认选设备支持的模式，GhostKey 选项标注内核支持状态），两个引擎共用 Shizuku、Root 管理器选择、执行 sheet 与日志流（日志协议同源，`<s>/<b>/<->` 标记直通着色）。GhostKey 的主要功能（自动匹配、boot.img 导入生成 profile、已存 profile 选用/删除）以精简形态接入；执行前弹合并安全确认框（启动须知 + 注入风险 + 范围外警示）。早期版本的“外壳首页 + 双入口”（SuiteHomeUI / GhostKeyActivity）已删除。
 
 > ⚠️ 仅供设备所有者授权下的安全研究使用，两个上游项目的原始许可与免责声明继续适用（GhostLock: Apache-2.0；GhostKey: 详见其 README 安全声明）。
 
@@ -10,17 +10,19 @@
 
 ```
 ghostlock-suite/
-├── app/            # 外壳（com.ghostlock.app）＝原 ghostlock-app，新增 SuiteHomeUI 首页
-├── ghostkey/       # 新 library 模块（com.GhostKey.app）＝原 GhostKey App
-│                   #   入口 MainActivity → GhostKeyActivity（去 LAUNCHER）
+├── app/            # 外壳（com.ghostlock.app）＝原 ghostlock-app，唯一 UI；
+│                   #   新增 ghostkey/GhostKeyEngineBridge（引擎桥接层）
+├── ghostkey/       # library 模块（com.GhostKey.app）＝原 GhostKey App 的 headless
+│                   #   引擎（无 UI：engine/data/device/ksu/native/shizuku）
 ├── profile-core/   # 原 ghostlock-app 的 profile 导出 JVM 模块
 ├── src/            # GhostLock native exploit（C++23，make 构建 → libghostlock.so）
 ├── tools/          # ghostlock-extract（Rust → libextract.so）
 ```
 
-启动流程：外壳 MainActivity（唯一 LAUNCHER）→ `SuiteHomeUI` 首页 →
-- 点 **GhostLock** 卡片 → 进原 GhostlockUI（返回键回首页）
-- 点 **GhostKey** 卡片 → `startActivity(GhostKeyActivity)`，其内部 Compose/Material3 界面保持原有功能与终端观感
+启动流程：MainActivity（唯一 LAUNCHER）→ GhostLock 主界面 →
+- `EngineCard` 选择提权引擎（默认 = 设备支持的模式；GhostLock supported 优先，否则 GhostKey IN_RANGE）
+- 选 GhostKey 时：Shizuku 开关强制开启；profile 区块切换为 GhostKey 体系（自动匹配 / boot.img 导入 / 已存 profile 精简列表）；执行按钮先弹合并安全确认，确认后经 `GhostKeyEngineBridge` 驱动引擎，日志直通现有执行 sheet
+- GhostKey 的 Material3 独立界面（MainScreen/SettingsScreen/LogViewerScreen/GhostKeyActivity）与外壳首页已删除，Compose 依赖从 ：ghostkey 模块移除
 
 ## 已解决的合并冲突
 
@@ -33,7 +35,7 @@ ghostlock-suite/
 | `app_name` 字符串合并覆盖 | GhostKey 改用独立 `ghostkey_name`（MainScreen 标题引用同步更新） |
 | 图标资源重复（ic_launcher_foreground 等） | 删除 library 侧未引用的 launcher mipmap/drawable |
 | 签名 | 移除 GhostKey 自带 release 签名配置（keystore 本就不入库），统一用外壳 `local.properties` 的 KEYSTORE_* 签名链 |
-| R8 keep 规则 | GhostKey 的 proguard-rules.pro 改为 `consumerProguardFiles` 随 library 下发，外壳 release R8 自动消费（Shizuku UserService / AIDL / ViewModel keep）。全局选项（`-repackageclasses`/`-allowaccessmodification`/`-assumenosideeffects`）不能出现在 consumer 规则里（AGP `exportReleaseConsumerProguardFiles` 会直接失败），统一搬到 `app/proguard-rules.pro` |
+| R8 keep 规则 | GhostKey 的 proguard-rules.pro 改为 `consumerProguardFiles` 随 library 下发，外壳 release R8 自动消费（Shizuku UserService / AIDL keep）。全局选项（`-repackageclasses`/`-allowaccessmodification`/`-assumenosideeffects`）不能出现在 consumer 规则里（AGP `exportReleaseConsumerProguardFiles` 会直接失败），统一搬到 `app/proguard-rules.pro` |
 | ABI | 外壳 `splits.abi` 已限定 arm64-v8a；library 增加 `ndk.abiFilters += "arm64-v8a"` 与之对齐 |
 | AGP/Kotlin 版本 | 统一为外壳的 AGP 9.1.0 + Kotlin 2.4.20；library 弃用 `kotlinOptions`，改用 `jvmToolchain(21)` |
 
@@ -85,7 +87,7 @@ ghostlock-suite/
 - `settings.gradle.kts`：+`:ghostkey`，rootProject.name → `GhostLock Suite`
 - `build.gradle.kts`（根）：注册 `com.android.library` / `org.jetbrains.kotlin.android` 插件版本
 - `app/build.gradle.kts`：+`implementation(project(":ghostkey"))`
-- `app/ui/MainActivity.kt`：接入 SuiteHomeUI 路由（rememberSaveable + BackHandler）
-- `app/ui/SuiteHomeUI.kt`：新增（Miuix 首页）
-- `app/res/values*/strings.xml`：新增 suite_home_* / module_* 字符串（en/zh/pt）
-- `ghostkey/`：见上表（build.gradle.kts 重写为 library、Manifest 瘦身、入口改名、资产改名、Application 删除）
+- `app/ui/MainActivity.kt`：注入 `GhostKeyEngineBridge`；引擎切换 / GhostKey profile 导入选用删除的 action 接线
+- `app/ghostkey/GhostKeyEngineBridge.kt`：新增（GhostKey 引擎桥接层：执行 / Shizuku / profile 库）
+- `app/res/values*/strings.xml`：新增 engine_* / ghostkey_* 字符串（en/zh/pt）
+- `ghostkey/`：见上表（build.gradle.kts 重写为 library、去 Compose/UI、Manifest 瘦身、资产改名、Application 删除）

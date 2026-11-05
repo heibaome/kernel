@@ -64,7 +64,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId = "com.ghostlock.app"
+        applicationId = "com.kernel.ghostsuite"
         minSdk = 31
         targetSdk = 37
         versionCode = gitVersionCode

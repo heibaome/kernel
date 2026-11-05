@@ -20,10 +20,5 @@
 -keep class com.GhostKey.app.shizuku.ICve98260Callback { *; }
 -keep class com.GhostKey.app.shizuku.ICve98260Callback$* { *; }
 
-# ViewModel：AndroidViewModelFactory 通过反射 getConstructor 创建实例
--keep class com.GhostKey.app.viewmodel.ExploitViewModel {
-    <init>(android.app.Application);
-}
-
 # 反射/泛型安全所需的属性（Kotlin 反射、协程、Compose 均依赖）
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*

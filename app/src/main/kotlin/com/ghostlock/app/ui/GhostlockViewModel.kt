@@ -24,6 +24,7 @@ import com.ghostlock.app.domain.usecase.ReadDocumentUseCase
 import com.ghostlock.app.domain.usecase.RunExploitUseCase
 import com.ghostlock.app.domain.usecase.SelectCpuPairUseCase
 import com.ghostlock.app.domain.usecase.UpdateCloudProfilesUseCase
+import com.ghostlock.app.ghostkey.GhostKeyEngineBridge
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +49,12 @@ sealed interface GhostlockEffect {
 
 private const val OverwriteSummaryLimit = 12
 
-enum class DocumentRequest { ImportOffsetsHocon, ImportOffsetsJson, BootImage, XblImage, PayloadImage, UefiImage, VendorBootImage }
+enum class DocumentRequest {
+    ImportOffsetsHocon, ImportOffsetsJson, BootImage, XblImage, PayloadImage, UefiImage,
+    VendorBootImage,
+    /** GhostKey 引擎的 boot.img profile 导入（独立体系，经 GhostKeyEngineBridge）。 */
+    GhostKeyBootImg,
+}
 
 /** Options offered by [promptBootAttach], in display order. VENDOR_BOOT is
  * only ever added to that list for MediaTek devices */
@@ -58,15 +64,18 @@ private enum class ParseDialogStage { Mode, Attach }
 
 class GhostlockViewModel(
     private val repository: GhostlockRepository,
+    private val ghostKeyBridge: GhostKeyEngineBridge,
 ) : ViewModel() {
+    /** 用户是否手动选过引擎；未手动选时快照刷新会按支持性重设默认。 */
+    private var engineUserSelected = false
     private val effectChannel = Channel<GhostlockEffect>(Channel.BUFFERED)
     private val mutableState = MutableStateFlow(GhostlockUiState())
     private var initialized = false
     private var running = false
     private val loadKernelSnapshot = LoadKernelSnapshotUseCase(repository)
+    private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)
     private val selectCpuPairUseCase = SelectCpuPairUseCase(repository)
     private val importOffsetsUseCase = ImportOffsetsUseCase(repository)
-    private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)
     private val parseSourceUseCase = ParseSourceUseCase(repository)
     private val readDocumentUseCase = ReadDocumentUseCase(repository)
     private val runExploitUseCase = RunExploitUseCase(repository)
@@ -94,6 +103,10 @@ class GhostlockViewModel(
         if (initialized) return
         initialized = true
         repository.setShizukuStatusListener { refreshAccessStatus() }
+        // GhostKey 侧 Shizuku 状态推送：仅当前引擎为 GhostKey 时写入状态卡
+        ghostKeyBridge.addShizukuListener {
+            if (state.value.engine == ExploitEngine.GHOSTKEY) refreshGhostKeyStatus()
+        }
         viewModelScope.launch {
             refreshSnapshot()
             applyRecommendedShizuku()
@@ -919,6 +932,11 @@ class GhostlockViewModel(
     }
 
     fun toggleShizuku(enabled: Boolean) {
+        // GhostKey 引擎强制依赖 Shizuku，不允许关掉开关
+        if (!enabled && state.value.engine == ExploitEngine.GHOSTKEY) {
+            send(GhostlockEffect.Toast(R.string.ghostkey_shizuku_required))
+            return
+        }
         repository.setShizukuEnabled(enabled)
         mutableState.update { it.copy(shizukuEnabled = enabled) }
         if (!enabled && kernelSnapshot?.recommendShizuku == true) {
@@ -966,8 +984,47 @@ class GhostlockViewModel(
         send(GhostlockEffect.Toast(messageRes))
     }
 
+    /** 引擎切换（非运行态才可切换；GhostKey 强制依赖 Shizuku，切换时自动开启）。 */
+    fun onEngineSelected(engine: ExploitEngine) {
+        if (running || engine == state.value.engine) return
+        engineUserSelected = true
+        mutableState.update {
+            it.copy(
+                engine = engine,
+                shizukuEnabled = if (engine == ExploitEngine.GHOSTKEY) true else it.shizukuEnabled,
+            )
+        }
+        if (engine == ExploitEngine.GHOSTKEY) refreshGhostKeyStatus()
+    }
+
+    /** GhostKey 引擎状态刷新：Shizuku 状态卡 + profile 匹配/列表。 */
+    private fun refreshGhostKeyStatus() {
+        mutableState.update {
+            it.copy(
+                shizukuStatus = ghostKeyBridge.shizukuStatus(),
+                ghostKeyProfileRelease = ghostKeyBridge.matchedRelease(),
+                ghostKeyStoredProfiles = ghostKeyBridge.storedProfiles().map { p ->
+                    GhostKeyProfileSummary(p.fileName, p.release, p.complete)
+                },
+            )
+        }
+    }
+
     fun onStatusClick() {
         val snapshot = kernelSnapshot ?: return
+        if (state.value.engine == ExploitEngine.GHOSTKEY) {
+            when (state.value.shizukuStatus) {
+                ShizukuStatus.NOT_RUNNING -> send(GhostlockEffect.OpenShizuku)
+                ShizukuStatus.PERMISSION_REQUIRED -> {
+                    ghostKeyBridge.requestShizukuPermission()
+                    refreshGhostKeyStatus()
+                }
+                ShizukuStatus.NOT_REQUIRED,
+                ShizukuStatus.READY,
+                    -> Unit
+            }
+            return
+        }
         /* shizukuEnabled already carries the profile suggestion unless the
          * user overrode it (PROFILE-SUGGEST-01). */
         if (!snapshot.shizukuEnabled) return
@@ -982,6 +1039,10 @@ class GhostlockViewModel(
 
     private fun runExploit() {
         val snapshot = kernelSnapshot ?: return
+        if (state.value.engine == ExploitEngine.GHOSTKEY) {
+            requestGhostKeyStart()
+            return
+        }
         if (!snapshot.kernelSupported) {
             if (beginOperation()) {
                 appendLog("result: exploit chain unsupported by this kernel")
@@ -1007,6 +1068,102 @@ class GhostlockViewModel(
             } finally {
                 endOperation()
                 send(GhostlockEffect.KeepScreenAwake(false))
+            }
+        }
+    }
+
+    /** GhostKey 引擎执行入口：先弹合并安全确认（须知+注入风险+范围外）。 */
+    private fun requestGhostKeyStart() {
+        if (running) return
+        val snapshot = kernelSnapshot ?: return
+        if (!snapshot.kernelSupported && !state.value.ghostKeySupported) {
+            if (beginOperation()) {
+                appendLog("result: no exploit engine supports this kernel")
+                endOperation()
+            }
+            return
+        }
+        if (state.value.shizukuStatus != ShizukuStatus.READY) {
+            onStatusClick()
+            return
+        }
+        pendingConfirmation = PendingConfirmation.GhostKeyStart
+        mutableState.update {
+            it.copy(
+                dialogVisible = true,
+                dialogType = DialogType.CONFIRM,
+                dialogTitleRes = R.string.ghostkey_confirm_title,
+                dialogMessageRes = if (state.value.ghostKeySupported) {
+                    R.string.ghostkey_confirm_body
+                } else {
+                    R.string.ghostkey_confirm_body_out_of_range
+                },
+            )
+        }
+    }
+
+    /** GhostKey 引擎实际执行：与 GhostLock 共用执行 sheet/日志流/屏幕常亮。 */
+    private fun runGhostKey() {
+        val snapshot = kernelSnapshot ?: return
+        if (!beginOperation()) return
+        send(GhostlockEffect.KeepScreenAwake(true))
+        appendLog("==== start GhostKey (CVE-2026-98260) ====")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val code = ghostKeyBridge.run(
+                    releaseOverride = state.value.ghostKeySelectedRelease,
+                    deviceModel = snapshot.deviceName,
+                    appendLog = ::appendLog,
+                )
+                appendLog(if (code == 0) "result: exploit completed" else "result: exploit failed (exit code=$code)")
+                appendLog("exit code=$code")
+            } finally {
+                endOperation()
+                send(GhostlockEffect.KeepScreenAwake(false))
+            }
+        }
+    }
+
+    /** GhostKey profile 精简列表选用：null = 回到自动匹配。 */
+    fun onGhostKeyProfileSelected(fileName: String?) {
+        val release = fileName?.let { name ->
+            state.value.ghostKeyStoredProfiles.firstOrNull { it.fileName == name }?.release
+        }
+        mutableState.update { it.copy(ghostKeySelectedRelease = release) }
+        refreshGhostKeyStatus()
+    }
+
+    fun onGhostKeyProfileDeleted(fileName: String) {
+        ghostKeyBridge.deleteStored(fileName)
+        if (state.value.ghostKeySelectedRelease != null) {
+            mutableState.update { it.copy(ghostKeySelectedRelease = null) }
+        }
+        refreshGhostKeyStatus()
+    }
+
+    /** GhostKey boot.img 导入：走 SAF 选择器，经桥接层解析生成 profile。 */
+    private fun importGhostKeyImg(uri: String) {
+        if (!beginOperation(showLogSheet = false)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val name = uri.toUri().lastPathSegment?.let(Uri::decode)
+                    ?: uri.substringAfterLast('/')
+                val outcome = ghostKeyBridge.importImgFromUri(uri.toUri(), name)
+                when (outcome) {
+                    is com.GhostKey.app.data.ImportOutcome.Ok -> {
+                        appendLog("<k> GhostKey profile imported: ${outcome.release}")
+                        if (!outcome.complete) {
+                            appendLog("<-> missing fields: ${outcome.missing.joinToString()}")
+                        }
+                        send(GhostlockEffect.Toast(R.string.import_success))
+                    }
+                    is com.GhostKey.app.data.ImportOutcome.Err ->
+                        appendLog("<-> import failed: ${outcome.message}")
+                    null -> appendLog("<-> import failed: cannot read image")
+                }
+                refreshGhostKeyStatus()
+            } finally {
+                endOperation()
             }
         }
     }
@@ -1087,6 +1244,7 @@ class GhostlockViewModel(
             DocumentRequest.UefiImage -> stageUefi(uri)
             DocumentRequest.VendorBootImage -> stageVendorBoot(uri)
             DocumentRequest.PayloadImage -> stagePayload(uri)
+            DocumentRequest.GhostKeyBootImg -> importGhostKeyImg(uri)
             DocumentRequest.ImportOffsetsHocon, DocumentRequest.ImportOffsetsJson -> Unit
         }
     }
@@ -1136,7 +1294,13 @@ class GhostlockViewModel(
             renameTarget != null -> renameUserProfile(renameTarget, value)
             cloudSourceEdit -> saveCloudProfileSource(value)
             dialogType == DialogType.INPUT -> parseUrl(value)
-            dialogType == DialogType.CONFIRM -> toggleShizuku(true)
+            dialogType == DialogType.CONFIRM -> when (pendingConfirmation) {
+                is PendingConfirmation.GhostKeyStart -> {
+                    pendingConfirmation = null
+                    runGhostKey()
+                }
+                else -> toggleShizuku(true)
+            }
             else -> Unit
         }
     }
@@ -1164,12 +1328,32 @@ class GhostlockViewModel(
             runCatching { profileController.load(snapshot.kernelRelease, pair) }.getOrNull()
         }
         kernelSnapshot = snapshot
+        // GhostKey (CVE-2026-98260) 支持性与默认引擎：GhostLock 支持则优先；
+        // 否则 GhostKey IN_RANGE 时默认 GhostKey；均不支持保持 GhostLock 并展示不支持。
+        // 用户手动选过引擎后不再覆盖。
+        val gkSupport = ghostKeyBridge.support()
+        val gkSupported = gkSupport == com.GhostKey.app.device.DeviceBinding.KernelSupport.IN_RANGE
+        val gkUnknown = gkSupport == com.GhostKey.app.device.DeviceBinding.KernelSupport.UNKNOWN
+        if (!engineUserSelected) {
+            mutableState.update {
+                it.copy(
+                    engine = when {
+                        snapshot.kernelSupported -> ExploitEngine.GHOSTLOCK
+                        gkSupported -> ExploitEngine.GHOSTKEY
+                        else -> ExploitEngine.GHOSTLOCK
+                    }
+                )
+            }
+        }
         mutableState.update {
             it.copy(
                 deviceName = snapshot.deviceName,
                 kernelRelease = snapshot.kernelRelease,
                 socName = snapshot.socName,
                 kernelSupported = snapshot.kernelSupported,
+                ghostKeySupported = gkSupported,
+                ghostKeySupportUnknown = gkUnknown,
+                ghostKeyProfileRelease = ghostKeyBridge.matchedRelease(),
                 cpuPairLabels = snapshot.cpuPairLabels,
                 cpuPairIndex = snapshot.selectedCpuPair,
                 safeModeEnabled = snapshot.safeModeEnabled,
@@ -1559,7 +1743,6 @@ class GhostlockViewModel(
 
     private fun dismissDialog(clearConfirmation: Boolean = true) {
         if (clearConfirmation) pendingConfirmation = null
-        cloudSourceEditPending = false
         mutableState.update {
             it.copy(
                 dialogVisible = false,
@@ -1575,7 +1758,6 @@ class GhostlockViewModel(
                 dialogTitleRes = 0,
                 dialogMessage = "",
                 dialogMessageRes = 0,
-                dialogMessageArgs = emptyList(),
                 dialogItems = emptyList(),
                 dialogItemResIds = emptyList(),
                 dialogCurrentItemIndex = -1,
@@ -1648,6 +1830,9 @@ class GhostlockViewModel(
     }
 
     private sealed interface PendingConfirmation {
+        /** GhostKey 引擎执行前的合并安全确认。 */
+        data object GhostKeyStart : PendingConfirmation
+
         data class Import(val documents: Map<String, String>) : PendingConfirmation
         data class Parse(
             val input: String,

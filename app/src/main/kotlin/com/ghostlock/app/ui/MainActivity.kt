@@ -10,28 +10,29 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.GhostKey.app.ui.GhostKeyActivity
 import com.ghostlock.app.GhostlockApplication
 import com.ghostlock.app.R
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<GhostlockViewModel> {
         viewModelFactory {
-            initializer { GhostlockViewModel((application as GhostlockApplication).createRepository()) }
+            initializer {
+                val app = application as GhostlockApplication
+                GhostlockViewModel(
+                    repository = app.createRepository(),
+                    ghostKeyBridge = GhostKeyEngineBridge(app),
+                )
+            }
         }
     }
 
@@ -74,31 +75,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         viewModel.initialize()
         setContent {
-            // 外壳首页：GhostLock Suite 统一入口，再分发到两个提权模块
-            var openedModule by rememberSaveable { mutableStateOf<String?>(null) }
-            val ghostlockState by viewModel.state.collectAsStateWithLifecycle()
-            BackHandler(enabled = openedModule != null) { openedModule = null }
-            when (openedModule) {
-                MODULE_GHOSTLOCK -> GhostlockRoute(viewModel, ::handleEffect)
-                MODULE_GHOSTKEY -> LaunchedEffect(Unit) {
-                    startActivity(Intent(this@MainActivity, GhostKeyActivity::class.java))
-                    openedModule = null
-                }
-                else -> {
-                    // 跨模块运行互斥：GhostLock exploit 执行中禁用 GhostKey 入口，
-                    // 防止两个内核 exploit（PI-futex 与 UAF）并发攻击同一内核。
-                    // GhostKey 侧对序：其 MainScreen 在 isRunning 时拦截返回键，
-                    // 运行中无法退回本首页，双向闭合。
-                    SuiteHomeUI(
-                        ghostLockRunning = ghostlockState.running,
-                        onOpenGhostLock = { openedModule = MODULE_GHOSTLOCK },
-                        onOpenGhostKey = {
-                            if (!ghostlockState.running) openedModule = MODULE_GHOSTKEY
-                        },
-                        onExit = { finish() },
-                    )
-                }
-            }
+            // 双引擎融合：GhostLock 主界面为唯一 UI，提权引擎二选一
+            // （EngineCard 切换，默认选设备支持的模式），不再有独立外壳首页。
+            GhostlockRoute(viewModel, ::handleEffect)
         }
         setupSystemBars()
     }
@@ -183,8 +162,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
-        const val MODULE_GHOSTLOCK = "ghostlock"
-        const val MODULE_GHOSTKEY = "ghostkey"
     }
 }
 
@@ -201,6 +178,20 @@ private fun GhostlockRoute(
         state = state,
         actions = object : GhostlockActions {
             override fun onRun() = viewModel.onRun()
+            override fun onEngineSelected(engine: ExploitEngine) =
+                viewModel.onEngineSelected(engine)
+
+            override fun onGhostKeyImportBoot() {
+                pendingDocumentRequest = DocumentRequest.GhostKeyBootImg
+                documentPicker.launch(arrayOf("*/*"))
+            }
+
+            override fun onGhostKeyProfileSelected(fileName: String?) =
+                viewModel.onGhostKeyProfileSelected(fileName)
+
+            override fun onGhostKeyProfileDeleted(fileName: String) =
+                viewModel.onGhostKeyProfileDeleted(fileName)
+
             override fun onProfileInvalid() = viewModel.onProfileInvalid()
             override fun onStatusClick() = viewModel.onStatusClick()
             override fun onCloseExecutionSheet() = viewModel.onCloseExecutionSheet()

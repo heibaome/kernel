@@ -102,8 +102,30 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
+/**
+ * 提权引擎二选一：同一套主 UI、同一执行 sheet，仅攻击载荷不同。
+ * 默认值在 ViewModel 刷新快照时按设备支持性计算（GhostLock 优先）。
+ */
+enum class ExploitEngine { GHOSTLOCK, GHOSTKEY }
+
 data class GhostlockUiState(
     val deviceName: String = "",
+    /** 当前选中的提权引擎（默认 = 设备支持的模式）。 */
+    val engine: ExploitEngine = ExploitEngine.GHOSTLOCK,
+    /** GhostKey (CVE-2026-98260) 内核支持性（IN_RANGE 才可执行）。 */
+    val ghostKeySupported: Boolean = false,
+    /** GhostKey 内核支持性未知（无法读版本/模拟器），允许手动选择但执行前强提示。 */
+    val ghostKeySupportUnknown: Boolean = false,
+    /** GhostKey 自动匹配到的 profile release；null 表示需导入 boot.img。 */
+    val ghostKeyProfileRelease: String? = null,
+    /** GhostKey 已导入的用户 profile（boot.img 生成），供精简列表选择/删除。 */
+    val ghostKeyStoredProfiles: List<GhostKeyProfileSummary> = emptyList(),
+    /** GhostKey 手动选用的 profile release；null = 自动匹配当前内核。 */
+    val ghostKeySelectedRelease: String? = null,
+    /** Cloud profile pack source shown on the load-configuration screen. */
+    val cloudProfileSource: String = "",
+    /** True while a manual cloud profile update is running. */
+    val cloudProfileUpdating: Boolean = false,
     val kernelRelease: String = "",
     val socName: String = "",
     val kernelSupported: Boolean = false,
@@ -172,10 +194,6 @@ data class GhostlockUiState(
     val userProfiles: List<UserProfileFile> = emptyList(),
     /** Loaded user document feeding the imported layer; null means none. */
     val activeUserProfile: String? = null,
-    /** Cloud profile pack source shown on the load-configuration screen. */
-    val cloudProfileSource: String = "",
-    /** True while a manual cloud profile update is running. */
-    val cloudProfileUpdating: Boolean = false,
     /** File name of the open user-profile detail screen, null when closed. */
     val userProfileDetail: String? = null,
     val userProfileRenameTarget: String? = null,
@@ -187,10 +205,25 @@ data class GhostlockUiState(
 
 enum class DialogType { NONE, LIST, INPUT, CONFIRM, NOTICE }
 
+/** GhostKey 用户 profile 精简条目（boot.img 导入生成），供引擎选择器下的列表用。 */
+data class GhostKeyProfileSummary(
+    val fileName: String,
+    val release: String,
+    val complete: Boolean,
+)
+
 data class GhostlockLogLine(val text: String, val color: Int)
 
 interface GhostlockActions {
     fun onRun()
+    /** 提权引擎切换（GhostLock / GhostKey 二选一）。 */
+    fun onEngineSelected(engine: ExploitEngine)
+    /** GhostKey 引擎：发起 boot.img profile 导入选择器。 */
+    fun onGhostKeyImportBoot()
+    /** GhostKey 引擎：选用/清除用户 profile（null = 自动匹配）。 */
+    fun onGhostKeyProfileSelected(fileName: String?)
+    /** GhostKey 引擎：删除已导入的用户 profile。 */
+    fun onGhostKeyProfileDeleted(fileName: String)
     fun onProfileInvalid()
     fun onStatusClick()
     fun onCloseExecutionSheet()
@@ -408,7 +441,7 @@ private fun MainScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = "GhostLock",
+                title = "GhostSuite",
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -843,15 +876,33 @@ private fun ControlPanel(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        val ghostKeyEngine = state.engine == ExploitEngine.GHOSTKEY
         ActivationStatusCard(
-            supported = state.kernelSupported,
-            profileAvailable = state.executionHasProfile,
+            supported = if (ghostKeyEngine) state.ghostKeySupported else state.kernelSupported,
+            profileAvailable = if (ghostKeyEngine) {
+                state.ghostKeyProfileRelease != null
+            } else {
+                state.executionHasProfile
+            },
             profileValid = state.profileInvalidPaths.isEmpty(),
             shizukuEnabled = state.shizukuEnabled,
             shizukuStatus = state.shizukuStatus,
-            onParametersClick = actions::onOpenParameters,
+            onParametersClick = if (ghostKeyEngine) {
+                actions::onGhostKeyImportBoot
+            } else {
+                actions::onOpenParameters
+            },
             onShizukuClick = actions::onStatusClick,
             modifier = Modifier.fillMaxWidth(),
+        )
+        EngineCard(
+            engine = state.engine,
+            ghostKeySupported = state.ghostKeySupported,
+            ghostKeySupportUnknown = state.ghostKeySupportUnknown,
+            onEngineSelected = actions::onEngineSelected,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
         )
         DeviceInfoCard(
             deviceName = state.deviceName,
@@ -915,11 +966,169 @@ private fun ControlPanel(
                 ),
             )
         }
-        Card(modifier = modifier.padding(top = 12.dp)) {
+        if (ghostKeyEngine) {
+            GhostKeyProfileCard(
+                state = state,
+                onImportBoot = actions::onGhostKeyImportBoot,
+                onProfileSelected = actions::onGhostKeyProfileSelected,
+                onProfileDeleted = actions::onGhostKeyProfileDeleted,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+            )
+        } else {
+            Card(modifier = modifier.padding(top = 12.dp)) {
+                ArrowPreference(
+                    title = stringResource(R.string.advanced_settings),
+                    summary = stringResource(R.string.advanced_settings_summary),
+                    onClick = actions::onOpenAdvanced,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 提权引擎二选一卡：GhostLock (CVE-2026-43499) / GhostKey (CVE-2026-98260)。
+ * GhostKey 行右侧显示内核支持状态；不支持的引擎选项禁用。
+ */
+@Composable
+private fun EngineCard(
+    engine: ExploitEngine,
+    ghostKeySupported: Boolean,
+    ghostKeySupportUnknown: Boolean,
+    onEngineSelected: (ExploitEngine) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Text(
+            text = stringResource(R.string.engine_label),
+            fontSize = 17.sp,
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
+        )
+        EngineOption(
+            title = stringResource(R.string.engine_ghostlock),
+            summary = stringResource(R.string.engine_ghostlock_summary),
+            enabled = true,
+            supportBadge = null,
+            selected = engine == ExploitEngine.GHOSTLOCK,
+            onClick = { onEngineSelected(ExploitEngine.GHOSTLOCK) },
+        )
+        EngineOption(
+            title = stringResource(R.string.engine_ghostkey),
+            summary = stringResource(R.string.engine_ghostkey_summary),
+            enabled = ghostKeySupported || ghostKeySupportUnknown,
+            supportBadge = stringResource(
+                when {
+                    ghostKeySupported -> R.string.engine_support_in_range
+                    ghostKeySupportUnknown -> R.string.engine_support_unknown
+                    else -> R.string.engine_support_out_of_range
+                },
+            ),
+            selected = engine == ExploitEngine.GHOSTKEY,
+            onClick = { onEngineSelected(ExploitEngine.GHOSTKEY) },
+        )
+    }
+}
+
+@Composable
+private fun EngineOption(
+    title: String,
+    summary: String,
+    enabled: Boolean,
+    supportBadge: String?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.5f),
+            )
+            Text(
+                text = summary,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            if (supportBadge != null) {
+                Text(
+                    text = supportBadge,
+                    fontSize = 12.sp,
+                    color = if (selected) {
+                        MiuixTheme.colorScheme.primary
+                    } else {
+                        MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    },
+                )
+            }
+        }
+        if (selected) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircleOutline,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
+    }
+}
+
+/**
+ * GhostKey 引擎下的精简 profile 区：自动匹配状态 + boot.img 导入 +
+ * 已存 profile 选用/删除（主要功能提取，不做高级编辑）。
+ */
+@Composable
+private fun GhostKeyProfileCard(
+    state: GhostlockUiState,
+    onImportBoot: () -> Unit,
+    onProfileSelected: (String?) -> Unit,
+    onProfileDeleted: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val items = buildList {
+        add(DropdownItem(icon = null, title = stringResource(R.string.ghostkey_profile_auto)))
+        state.ghostKeyStoredProfiles.forEach { p ->
+            add(DropdownItem(icon = null, title = "${p.fileName} (${p.release})"))
+        }
+    }
+    val selectedFile = state.ghostKeyStoredProfiles.firstOrNull {
+        it.release == state.ghostKeySelectedRelease
+    }
+    val selectedIndex = if (selectedFile == null) 0 else 1 +
+        state.ghostKeyStoredProfiles.indexOf(selectedFile)
+    Card(modifier = modifier) {
+        OverlaySpinnerPreference(
+            title = stringResource(R.string.ghostkey_profile_label),
+            summary = state.ghostKeyProfileRelease?.let {
+                stringResource(R.string.ghostkey_profile_matched, it)
+            } ?: stringResource(R.string.ghostkey_profile_missing),
+            items = items,
+            selectedIndex = selectedIndex,
+            showValue = false,
+            onSelectedIndexChange = { index ->
+                onProfileSelected(
+                    if (index <= 0) null else state.ghostKeyStoredProfiles.getOrNull(index - 1)?.fileName,
+                )
+            },
+        )
+        ArrowPreference(
+            title = stringResource(R.string.ghostkey_import_boot),
+            summary = stringResource(R.string.ghostkey_import_boot_summary),
+            onClick = onImportBoot,
+        )
+        if (selectedFile != null) {
             ArrowPreference(
-                title = stringResource(R.string.advanced_settings),
-                summary = stringResource(R.string.advanced_settings_summary),
-                onClick = actions::onOpenAdvanced,
+                title = stringResource(R.string.ghostkey_delete_profile, selectedFile.fileName),
+                summary = null,
+                onClick = { onProfileDeleted(selectedFile.fileName) },
             )
         }
     }
