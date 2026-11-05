@@ -1066,9 +1066,6 @@ class GhostlockViewModel(
             return
         }
         engineUserSelected = true
-        /* GhostKey 硬依赖 Shizuku：把偏好持久化，避免返回页面后的快照刷新
-         * 因"用户从未显式设置"回落到 recommendShizuku 而把开关打回关闭。 */
-        if (engine == ExploitEngine.GHOSTKEY) repository.setShizukuEnabled(true, requestPermission = false)
         mutableState.update {
             it.copy(
                 engine = engine,
@@ -1450,7 +1447,13 @@ class GhostlockViewModel(
                 cpuPairIndex = snapshot.selectedCpuPair,
                 safeModeEnabled = snapshot.safeModeEnabled,
                 forceAttackTestEnabled = snapshot.forceAttackTest,
-                shizukuEnabled = snapshot.shizukuEnabled,
+                /* GhostKey 硬依赖 Shizuku：GK 引擎下开关强制为开（仅内存态，
+                 * 不落盘，避免污染 GL 的偏好）；GL 沿用持久化偏好/推荐值。 */
+                shizukuEnabled = if (it.engine == ExploitEngine.GHOSTKEY) {
+                    true
+                } else {
+                    snapshot.shizukuEnabled
+                },
                 shizukuStatus = snapshot.shizukuStatus,
                 profileInvalidPaths = loaded?.invalidPaths ?: emptySet(),
                 executionHasProfile = loaded?.hasProfile ?: false,
