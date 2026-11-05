@@ -111,6 +111,11 @@ class MainActivity : ComponentActivity() {
 
             GhostlockEffect.PickDebugFolder -> folderPicker.launch(null)
 
+            GhostlockEffect.PickGhostKeyBootImg -> {
+                pendingDocumentRequest = DocumentRequest.GhostKeyBootImg
+                documentPicker.launch(arrayOf("*/*"))
+            }
+
             is GhostlockEffect.CreateProfileDocument ->
                 profileDocumentCreator.launch(effect.suggestedName)
 
@@ -183,8 +188,7 @@ private fun GhostlockRoute(
                 viewModel.onEngineSelected(engine)
 
             override fun onGhostKeyImportBoot() {
-                pendingDocumentRequest = DocumentRequest.GhostKeyBootImg
-                documentPicker.launch(arrayOf("*/*"))
+                viewModel.requestGhostKeyBootImport()
             }
 
             override fun onGhostKeyProfileSelected(fileName: String?) =

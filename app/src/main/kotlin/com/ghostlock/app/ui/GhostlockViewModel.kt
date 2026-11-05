@@ -45,6 +45,9 @@ sealed interface GhostlockEffect {
     data class Clipboard(val text: String) : GhostlockEffect
     data class KeepScreenAwake(val enabled: Boolean) : GhostlockEffect
     data object OpenShizuku : GhostlockEffect
+
+    /** GhostKey boot.img import: route the SAF pick through the host activity. */
+    data object PickGhostKeyBootImg : GhostlockEffect
 }
 
 private const val OverwriteSummaryLimit = 12
@@ -1178,6 +1181,9 @@ class GhostlockViewModel(
         send(GhostlockEffect.Clipboard(text))
         send(GhostlockEffect.Toast(R.string.copied))
     }
+
+    /** GhostKey boot.img import: the host activity owns the SAF picker. */
+    fun requestGhostKeyBootImport() = send(GhostlockEffect.PickGhostKeyBootImg)
 
     fun importOffsetsHocon() =
         send(GhostlockEffect.PickDocument(DocumentRequest.ImportOffsetsHocon))
