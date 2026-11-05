@@ -127,10 +127,15 @@ python3 tools/cmp_disasm.py <baseline-binary> build/native/ghostlock
 - 现行文档：`README.md`、`docs/kernel_profiles/*`、`docs/development/adding-a-component.md`、
   `docs/development/design-philosophy.md`（设计思想，改动前必读）、
   `docs/development/engineering-standards.md`（工程规范，做法与门槛）、
-  `docs/development/documentation-standards.md`（文档规范）、`src/core/README.md`。
+  `docs/development/documentation-standards.md`（文档规范）、`src/core/README.md`、
+  `docs/MERGE.md`（GhostLock/GhostKey 融合记录与并发禁令）、
+  `docs/analysis/extractor-no-btf-struct-derivation-plan*`（未实施的活跃计划）。
 - 历史文档（已从工作树删除，需要时从 git 历史取回：`git show <commit>:<path>`）：
   - `docs/analysis/`：架构/迁移/解耦分析（routes、native-functions、native-cpp-current-uml、
-    native-global-state、native-entrypoint-plan、environment-convergence-plan 等）
+    native-global-state、native-entrypoint-plan、environment-convergence-plan 等）；
+    已完成并归档的实现计划：extract-pselect-fallback、gradle-test-decoupling、
+    host-attack-dataflow、kernel-phys-offset、profile-editor-complete-fields（各含 `_ZH`；
+    分别落地于 81b25c01、15f34caf 及 kernel_phys_offset / 编辑器完整字段实现）
   - `docs/analysis/device-gates/`：S04–S15、CPP00–CPP17、U01、NSFUNC/NSMOD/NSMOD2、
     PROFILE-\* 门禁证据链
   - 根目录：`ARCHITECTURE.md`、`DECOUPLING_PLAN.md`、`DECOUPLING_LOG.md`、
