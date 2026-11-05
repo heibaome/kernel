@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghostlock.app.R
@@ -86,8 +87,8 @@ fun RiskConfirmDialog(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Checkbox(
-                            checked = agreed,
-                            onCheckedChange = { agreed = it },
+                            state = if (agreed) ToggleableState.On else ToggleableState.Off,
+                            onClick = { agreed = !agreed },
                         )
                         Text(
                             text = stringResource(R.string.risk_confirm_agree),
