@@ -95,12 +95,17 @@ jobs:
       - name: Decode Android signing key
         if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         run: |
-          echo ${{ secrets.SIGNING_KEY }} | base64 -d > keystore.jks
+          echo ${{ secrets.SIGNING_KEY }} | base64 -d > keystore.jks 2>/dev/null
+          SIZE=$(stat -c%s keystore.jks 2>/dev/null || echo 0)
           # A release build must never silently fall back to the ephemeral
           # debug key: that rotates the signature on every run and blocks
           # overwrite installs for every existing user.
+          if [ "$SIZE" -eq 0 ]; then
+            echo "::error::SIGNING_KEY secret is missing or its base64 is invalid (decoded to 0 bytes). Add it under Settings > Secrets and variables > Actions > Repository secrets, name must be exactly SIGNING_KEY."
+            exit 1
+          fi
           if ! keytool -list -keystore keystore.jks -storepass "${{ secrets.KEY_STORE_PASSWORD }}" >/dev/null 2>&1; then
-            echo "::error::SIGNING_KEY missing or invalid; refusing to ship a release signed with a throwaway debug key"
+            echo "::error::SIGNING_KEY decoded to $SIZE bytes but keytool cannot open it: KEY_STORE_PASSWORD is wrong, or the base64 contains stray line breaks/spaces, or KEY_ALIAS does not exist in the keystore."
             exit 1
           fi
           echo "Release signing certificate fingerprint:"
