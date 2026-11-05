@@ -55,7 +55,7 @@ fun RiskConfirmDialog(
         }
     }
 
-    val close: (() -> Unit) -> Unit = { after ->
+    val close: ((() -> Unit)?) -> Unit = { after ->
         exitAction = after
         visible = false
     }
