@@ -283,5 +283,5 @@
     <string name="mode_ghostlock_unmatched">当前内核未命中 GhostLock profile。</string>
     <string name="mode_ghostkey_unmatched">当前内核未命中 GhostKey profile。</string>
     <string name="mode_ghostkey_matched">命中 profile：%1$s</string>
-    <string name="module_busy_other_running">占用中：另一提权引擎执行中，完成后才能切换。</string>
+    <string name="module_busy_other_running">占用中：提权执行中，完成后才能切换引擎。</string>
 </resources>

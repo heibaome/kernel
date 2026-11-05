@@ -285,5 +285,5 @@ Substituí-los pelos novos valores?"</string>
     <string name="mode_ghostlock_unmatched">Nenhum perfil GhostLock corresponde a este kernel.</string>
     <string name="mode_ghostkey_unmatched">Nenhum perfil GhostKey corresponde a este kernel.</string>
     <string name="mode_ghostkey_matched">Perfil correspondente: %1$s</string>
-    <string name="module_busy_other_running">Ocupado: o outro motor de exploit está em execução. Aguarde antes de alternar.</string>
+    <string name="module_busy_other_running">Ocupado: um exploit está em execução. A troca de motores fica desativada até terminar.</string>
 </resources>

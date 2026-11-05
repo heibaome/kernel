@@ -283,5 +283,5 @@
     <string name="mode_ghostlock_unmatched">No GhostLock profile matches this kernel.</string>
     <string name="mode_ghostkey_unmatched">No GhostKey profile matches this kernel.</string>
     <string name="mode_ghostkey_matched">Matched profile: %1$s</string>
-    <string name="module_busy_other_running">Busy: the other exploit engine is running. Wait for it to finish before switching.</string>
+    <string name="module_busy_other_running">Busy: an exploit is running. Switching engines is disabled until it finishes.</string>
 </resources>
