@@ -68,18 +68,17 @@ ghostlock-suite/
 |---|---|---|---|
 | 1 | 两模块同用 `filesDir/user_profiles/`：GL 的 UserProfileStore 列出目录下**所有文件**（不筛扩展名）并解析 release，GK 写入 `user-<release>.conf`（不同 CVE 的偏移 schema）→ 互相把对方的提权偏移表当成本模块 profile 套用 | **确定性数据污染**（非概率性，必发） | 已修：GK 目录改 `ghostkey_user_profiles/`、`ghostkey_run_logs/`，与外壳隔离 |
 | 2 | Shizuku 权限请求码两侧同是 `4815`：同进程共享 Shizuku 静态 listener 注册表，同码请求会互相覆盖 pending 授权流 | 真竞态 | 已修：GK 改 `REQUEST_CODE = 9826`，GL 保持 4815 |
-| 3 | 运行互斥只看自己（GL `if(running)` / GK `if(isRunning)`），外壳 back 又允许运行中切回首页 → 两个内核 exploit（PI-futex 与 UAF）可并发攻击同一内核：堆布局互相破坏、GL W1 的 SELinux 全局翻转中途改变 GK 校准环境、双 KernelSU handoff 时两个 ksud 抢状态 | 真竞态 | 已修（双向 UI 互斥）：首页在 GL running 时禁用 GK 卡（置灰+提示）；GK MainScreen 在 isRunning 时拦截返回键，防 native exploit 孤儿化。仍可用 Home 键绕过，见残余风险 |
+| 3 | 运行互斥只看自己（GL `if(running)` / GK `if(isRunning)`），两个内核 exploit（PI-futex 与 UAF）可并发攻击同一内核：堆布局互相破坏、GL W1 的 SELinux 全局翻转中途改变 GK 校准环境、双 KernelSU handoff 时两个 ksud 抢状态 | 真竞态 | 已修（VM 层强制互斥）：融合后 GL `runExploit` 与 GK `runGhostKey` 共用 ViewModel 单一 `running` 标志（`beginOperation()`），运行中引擎切换亦被锁（`onEngineSelected` 直接返回）；同进程内并发已不可能。残余向量见下节 |
 | 4 | 顺序执行下的环境依赖：GL 成功后 KernelSU 常驻会改变 Shizuku uid 模式（shell→root），GK 的 shell uid=2000 前提变化 | 环境依赖（非并发） | 未修：需真机验证 GK 在 KernelSU 已常驻环境下的行为 |
 
-> UI 互斥说明：Miuix Card 0.9.4 无 enabled 参数（源码已核），禁用态用 onClick=null + 压灰背景实现。
+> 引擎互斥的权威实现：`GhostlockViewModel.running`（单一布尔标志）+ `beginOperation()` 入口检查，
+> 双引擎执行路径与引擎切换均经过它；本文档与 README 仅作警示补充。
 
 ## 残余风险 / 待真机验证
 
-1. **UI 互斥非强制隔离**：用户可用 Home 键/通知栏绕过外壳首页，两 exploit 理论上仍可并发；根治需内核级/设备级约束，当前靠 UI 拦截 + 本文档警示。**同一设备上禁止并发执行两个模块**：两 exploit 的堆风水假设互斥，SELinux 是全局状态，双 ksud handoff 会争抢 /data/adb 状态。
+1. **应用双开 / 工作资料（残余并发向量）**：同一 `running` 标志只在单进程内生效。系统级应用双开或工作资料会产生独立进程，App 层无法约束——根治需内核级/设备级隔离。**同一设备同一用户下禁止并发执行两个模块**：两 exploit 的堆风水假设互斥，SELinux 是全局状态，双 ksud handoff 会争抢 /data/adb 状态。
 2. **KernelSU 常驻后的跨模块行为**：GL 提权成功→KernelSU 常驻后，GK 的 Shizuku 探测（uid 模式）与 PrivilegeGate 行为需真机验证。另需验证顺序执行：GL handoff 后再跑 GK，其 KsudStage 对已运行的 ksud 是否幂等。
-3. **Compose 版本仲裁**：外壳直接依赖 compose 1.12.1（Miuix 0.9.4 要求），GhostKey 经 BOM 2024.10 引入 material3 1.3.x。Gradle 会仲裁到高版本 runtime，Compose 官方保证旧库对新 runtime 的前向二进制兼容，但建议真机过一遍 GhostKey 全部页面（执行 / 日志 / 设置 / profile 导入导出）。若出现 Material3 崩溃，把 `:ghostkey` 的 BOM 升到与 1.12 对齐的版本即可。
-2. **双 Shizuku UserService 共存**：两个 service 类与 AIDL 包名不同，理论上无冲突；建议在同一设备上先后跑通两个模块的 Shizuku 授权路径。
-3. 本仓库未做过完整 Gradle 构建（合并为源码级交付），首次构建如遇资源/资产遗漏，优先检查上文冲突清单。
+3. **双 Shizuku UserService 共存**：两个 service 类与 AIDL 包名不同，理论上无冲突；建议在同一设备上先后跑通两个模块的 Shizuku 授权路径。
 4. GhostLock 的 native（make + Rust）构建链未动，按原项目文档操作。
 
 ## 与原项目的差异清单（快速 diff 定位）
