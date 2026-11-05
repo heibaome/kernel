@@ -275,6 +275,15 @@
     <!-- 双引擎选择器（GhostLock / GhostKey） -->
     <string name="engine_label">提权引擎</string>
     <string name="engine_switch_locked">执行中，无法切换引擎</string>
+    <!-- 深入功能的 15 秒风险确认 -->
+    <string name="risk_confirm_title">高风险操作确认</string>
+    <string name="risk_confirm_disclaimer">此功能仅供设备适配者与安全研究者在真机验证时使用。错误使用可能导致内核崩溃、数据损坏甚至设备变砖，一切后果由您自行承担，开发者对任何损失概不负责。</string>
+    <string name="risk_confirm_agree">我已阅读并理解上述风险，自愿承担全部后果</string>
+    <string name="risk_confirm_wait">请仔细阅读（%1$d 秒）</string>
+    <string name="risk_confirm_confirm">确认执行</string>
+    <string name="risk_body_force">即将开启强制攻击测试：执行前的内核状态预检（含 KernelSU 接管检测）将被跳过，即使内核本应拒绝也会强制执行。</string>
+    <string name="risk_body_override">即将进入内核偏移字段覆写页面，任何错误数值都可能在执行时引发内核崩溃或设备变砖。</string>
+    <string name="risk_body_builtin">即将加载与当前内核不匹配的内置 profile「%1$s」，这是实验性组合。</string>
     <string name="engine_ghostlock">GhostLock（CVE-2026-43499）</string>
     <string name="engine_ghostlock_summary">PI-futex 内核提权 · W1/W2/W3 链</string>
     <string name="engine_ghostkey">GhostKey（CVE-2026-98260）</string>

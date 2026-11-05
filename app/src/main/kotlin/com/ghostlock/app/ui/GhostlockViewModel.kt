@@ -828,6 +828,17 @@ class GhostlockViewModel(
     }
 
     fun onSelectBuiltinProfile(release: String?) {
+        /* 自动匹配无风险直接选；指定非本机内核版本的 profile 属实验行为，先过风险确认。 */
+        if (release != null) {
+            mutableState.update {
+                it.copy(riskConfirm = RiskConfirmKind.BUILTIN_PROFILE, riskPendingRelease = release)
+            }
+            return
+        }
+        selectBuiltinProfile(null)
+    }
+
+    private fun selectBuiltinProfile(release: String?) {
         val snapshot = kernelSnapshot ?: return
         val pair = snapshot.cpuPairs.getOrNull(snapshot.selectedCpuPair) ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -892,8 +903,8 @@ class GhostlockViewModel(
     }
 
     fun onOpenAdvancedOverrides() {
-        mutableState.update { it.copy(advancedOverrideVisible = true) }
-        loadEditSession()
+        /* 深入字段覆写为高危功能：先过 15 秒风险确认再进入。 */
+        mutableState.update { it.copy(riskConfirm = RiskConfirmKind.ADVANCED_OVERRIDE) }
     }
 
     fun onCloseAdvancedOverrides() {
@@ -957,8 +968,40 @@ class GhostlockViewModel(
     }
 
     fun toggleForceAttackTest(enabled: Boolean) {
-        repository.setForceAttackTest(enabled)
-        mutableState.update { it.copy(forceAttackTestEnabled = enabled) }
+        if (enabled) {
+            /* 开启属于高危操作：强制走 15 秒风险确认，取消/关闭开关不受影响。 */
+            mutableState.update { it.copy(riskConfirm = RiskConfirmKind.FORCE_ATTACK) }
+            return
+        }
+        repository.setForceAttackTest(false)
+        mutableState.update { it.copy(forceAttackTestEnabled = false) }
+    }
+
+    fun onRiskDismiss() {
+        mutableState.update { it.copy(riskConfirm = null, riskPendingRelease = null) }
+    }
+
+    fun onRiskConfirm() {
+        when (state.value.riskConfirm) {
+            RiskConfirmKind.FORCE_ATTACK -> {
+                repository.setForceAttackTest(true)
+                mutableState.update {
+                    it.copy(forceAttackTestEnabled = true, riskConfirm = null)
+                }
+            }
+            RiskConfirmKind.ADVANCED_OVERRIDE -> {
+                mutableState.update {
+                    it.copy(advancedOverrideVisible = true, riskConfirm = null)
+                }
+                loadEditSession()
+            }
+            RiskConfirmKind.BUILTIN_PROFILE -> {
+                val release = state.value.riskPendingRelease
+                mutableState.update { it.copy(riskConfirm = null, riskPendingRelease = null) }
+                if (release != null) selectBuiltinProfile(release)
+            }
+            null -> Unit
+        }
     }
 
     fun toggleShizuku(enabled: Boolean) {

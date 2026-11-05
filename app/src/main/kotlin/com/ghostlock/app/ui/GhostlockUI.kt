@@ -138,6 +138,10 @@ data class GhostlockUiState(
     val customCpuPair: CpuPair? = null,
     val safeModeEnabled: Boolean = false,
     val forceAttackTestEnabled: Boolean = false,
+    /** 待展示的 15 秒风险确认对话框；null = 无。 */
+    val riskConfirm: RiskConfirmKind? = null,
+    /** BUILTIN_PROFILE 确认时暂存的目标 release。 */
+    val riskPendingRelease: String? = null,
     val tcpRouteEnabled: Boolean = true,
     val compact: Boolean = false,
     val executionSheetVisible: Boolean = false,
@@ -205,6 +209,9 @@ data class GhostlockUiState(
 
 enum class DialogType { NONE, LIST, INPUT, CONFIRM, NOTICE }
 
+/** 深入功能的风险确认入口（15 秒不可跳过对话框）。 */
+enum class RiskConfirmKind { FORCE_ATTACK, ADVANCED_OVERRIDE, BUILTIN_PROFILE }
+
 /** GhostKey 用户 profile 精简条目（boot.img 导入生成），供引擎选择器下的列表用。 */
 data class GhostKeyProfileSummary(
     val fileName: String,
@@ -236,6 +243,10 @@ interface GhostlockActions {
     fun onCpuPairSelected(index: Int)
     fun onSafeModeChanged(enabled: Boolean)
     fun onForceAttackTestChanged(enabled: Boolean)
+    /** 风险确认对话框：用户勾选同意并等满 15 秒后确认。 */
+    fun onRiskConfirm()
+    /** 风险确认对话框：取消（仅按钮可关，点外部/返回无效）。 */
+    fun onRiskDismiss()
     fun onShizukuChanged(enabled: Boolean)
     fun onOpenManagerPicker()
     fun onCloseManagerPicker()
@@ -423,6 +434,7 @@ internal fun GhostlockApp(
                     }
                 }
                 GhostlockDialog(state = state, actions = actions)
+                RiskConfirmDialog(state = state, actions = actions)
                 GhostlockOverwriteDialog(state = state, actions = actions)
                 GhostlockExecutionSheet(state = state, actions = actions)
                 GhostlockManagerPickerSheet(state = state, actions = actions)
