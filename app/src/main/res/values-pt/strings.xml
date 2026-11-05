@@ -278,12 +278,12 @@ Substituí-los pelos novos valores?"</string>
 <string name="w3_shizuku_hint_enable">Habilitar</string>
 <string name="w3_shizuku_hint_message">A última execução falhou no estágio de desvio do seccomp W3. A execução via Shizuku (shell uid, sem seccomp) ignora isso.</string>
 <string name="w3_shizuku_hint_title">Habilitar Shizuku?</string>
-    <string name="suite_home_title">GhostLock Suite</string>
     <string name="module_ghostlock_title">GhostLock</string>
     <string name="module_ghostlock_summary">CVE-2026-43499 · exploit de kernel PI-futex</string>
     <string name="module_ghostkey_title">GhostKey</string>
     <string name="module_ghostkey_summary">CVE-2026-98260 · exploit Shizuku + NDK</string>
-    <string name="suite_home_footer">Apenas para pesquisa de segurança em dispositivos de sua propriedade.</string>
-    <string name="module_running_summary">Executando…</string>
-    <string name="module_busy_other_running">Ocupado: exploit GhostLock em andamento. Aguarde antes de iniciar GhostKey.</string>
+    <string name="mode_ghostlock_unmatched">Nenhum perfil GhostLock corresponde a este kernel.</string>
+    <string name="mode_ghostkey_unmatched">Nenhum perfil GhostKey corresponde a este kernel.</string>
+    <string name="mode_ghostkey_matched">Perfil correspondente: %1$s</string>
+    <string name="module_busy_other_running">Ocupado: o outro motor de exploit está em execução. Aguarde antes de alternar.</string>
 </resources>

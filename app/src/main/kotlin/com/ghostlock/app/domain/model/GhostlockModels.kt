@@ -24,6 +24,12 @@ data class KernelSnapshot(
 
 enum class ShizukuStatus { NOT_REQUIRED, NOT_RUNNING, PERMISSION_REQUIRED, READY }
 
+/**
+ * Which exploit engine the unified main UI drives. The two engines attack the
+ * kernel through different primitives and must never run concurrently.
+ */
+enum class ExploitMode { GHOSTLOCK, GHOSTKEY }
+
 enum class LogTone { Default, Error, Success, Warning, Progress, Kotlin, Shizuku }
 
 data class LogEntry(val text: String, val tone: LogTone)

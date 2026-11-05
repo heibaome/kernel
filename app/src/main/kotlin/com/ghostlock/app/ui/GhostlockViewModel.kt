@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghostlock.app.R
 import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
+import com.ghostlock.app.domain.model.ExploitMode
 import com.ghostlock.app.domain.model.KernelSnapshot
 import com.ghostlock.app.domain.model.LogTone
 import com.ghostlock.app.domain.model.OffsetImportResult
@@ -17,6 +18,7 @@ import com.ghostlock.app.domain.model.ShizukuStatus
 import com.ghostlock.app.domain.repository.GhostlockRepository
 import com.ghostlock.app.domain.repository.ProfileConfigController
 import com.ghostlock.app.domain.usecase.FormatLogUseCase
+import com.ghostlock.app.domain.usecase.DetectExploitModeUseCase
 import com.ghostlock.app.domain.usecase.ImportOffsetsUseCase
 import com.ghostlock.app.domain.usecase.LoadKernelSnapshotUseCase
 import com.ghostlock.app.domain.usecase.ParseSourceUseCase
@@ -44,6 +46,9 @@ sealed interface GhostlockEffect {
     data class Clipboard(val text: String) : GhostlockEffect
     data class KeepScreenAwake(val enabled: Boolean) : GhostlockEffect
     data object OpenShizuku : GhostlockEffect
+
+    /** Batch A bridge: open the GhostKey module UI (headless integration lands in batch B). */
+    data object OpenGhostKey : GhostlockEffect
 }
 
 private const val OverwriteSummaryLimit = 12
@@ -64,6 +69,7 @@ class GhostlockViewModel(
     private var initialized = false
     private var running = false
     private val loadKernelSnapshot = LoadKernelSnapshotUseCase(repository)
+    private val detectExploitMode = DetectExploitModeUseCase(repository)
     private val selectCpuPairUseCase = SelectCpuPairUseCase(repository)
     private val importOffsetsUseCase = ImportOffsetsUseCase(repository)
     private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)
@@ -100,7 +106,32 @@ class GhostlockViewModel(
             maybeSuggestShizukuForW3()
             val source = runCatching { repository.cloudProfileSource() }.getOrDefault("")
             mutableState.update { it.copy(cloudProfileSource = source) }
+            detectMode()
         }
+    }
+
+    /**
+     * Resolve the active exploit mode: the persisted manual override wins,
+     * otherwise the auto detection (GhostKey only when it alone matches the
+     * kernel; GhostLock stays the default in every other case).
+     */
+    private suspend fun detectMode() {
+        val saved = runCatching { repository.savedExploitMode() }.getOrNull()
+        val detection = runCatching { detectExploitMode() }.getOrNull() ?: return
+        mutableState.update {
+            it.copy(
+                mode = saved ?: detection.defaultMode,
+                modeIsManual = saved != null,
+                ghostkeyMatched = detection.ghostkeyMatched,
+                ghostkeyMatchedRelease = detection.ghostkeyRelease,
+            )
+        }
+    }
+
+    fun onModeChanged(mode: ExploitMode) {
+        if (running) return
+        repository.saveExploitMode(mode)
+        mutableState.update { it.copy(mode = mode, modeIsManual = true) }
     }
 
     private var recommendedShizukuApplied = false
@@ -951,11 +982,23 @@ class GhostlockViewModel(
         mutableState.update { it.copy(selectedManagerPackage = pkg, managerPickerVisible = false) }
     }
 
-    fun onRun() = runExploit()
+    fun onRun() {
+        if (state.value.mode == ExploitMode.GHOSTKEY) {
+            /* Batch A: the GhostKey UI is still a separate activity; batch B
+             * replaces this with the in-app headless panel. */
+            if (!running) send(GhostlockEffect.OpenGhostKey)
+            return
+        }
+        runExploit()
+    }
 
     /** Explains why the run button is greyed out. */
     fun onProfileInvalid() {
         val state = state.value
+        if (state.mode == ExploitMode.GHOSTKEY) {
+            if (!state.ghostkeyMatched) send(GhostlockEffect.Toast(R.string.kernel_unsupported))
+            return
+        }
         val messageRes = when {
             !state.executionHasProfile -> R.string.run_blocked_no_profile
             state.shizukuEnabled && state.shizukuStatus != ShizukuStatus.READY ->

@@ -275,13 +275,13 @@
     <string name="fallback_label">Fallback route</string>
     <string name="fallback_none">None</string>
     <string name="field_fallback_to">fallback_to</string>
-    <string name="module_running_summary">Running…</string>
-    <string name="module_busy_other_running">Busy: GhostLock exploit in progress. Wait for it to finish before launching GhostKey.</string>
-    <!-- GhostLock Suite 外壳首页 -->
-    <string name="suite_home_title">GhostLock Suite</string>
+    <!-- Exploit mode selector on the unified main screen -->
     <string name="module_ghostlock_title">GhostLock</string>
     <string name="module_ghostlock_summary">CVE-2026-43499 · PI-futex kernel exploit</string>
     <string name="module_ghostkey_title">GhostKey</string>
     <string name="module_ghostkey_summary">CVE-2026-98260 · Shizuku + NDK exploit</string>
-    <string name="suite_home_footer">For authorized security research on devices you own only.</string>
+    <string name="mode_ghostlock_unmatched">No GhostLock profile matches this kernel.</string>
+    <string name="mode_ghostkey_unmatched">No GhostKey profile matches this kernel.</string>
+    <string name="mode_ghostkey_matched">Matched profile: %1$s</string>
+    <string name="module_busy_other_running">Busy: the other exploit engine is running. Wait for it to finish before switching.</string>
 </resources>

@@ -62,6 +62,7 @@ import com.ghostlock.app.R
 import com.ghostlock.app.data.ManagerScanner
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.ExecutionFieldValue
+import com.ghostlock.app.domain.model.ExploitMode
 import com.ghostlock.app.domain.model.ProfileFieldNode
 import com.ghostlock.app.domain.model.ShizukuStatus
 import com.ghostlock.app.domain.model.UserProfileFile
@@ -183,6 +184,13 @@ data class GhostlockUiState(
     val managerCandidates: List<ManagerScanner.Candidate> = emptyList(),
     val selectedManagerPackage: String? = null,
     val managerPickerVisible: Boolean = false,
+    /** Which exploit engine the unified main UI drives. */
+    val mode: ExploitMode = ExploitMode.GHOSTLOCK,
+    /** True when the user picked the mode manually; false = auto detection. */
+    val modeIsManual: Boolean = false,
+    /** GhostKey engine probe result for the current kernel. */
+    val ghostkeyMatched: Boolean = false,
+    val ghostkeyMatchedRelease: String? = null,
 )
 
 enum class DialogType { NONE, LIST, INPUT, CONFIRM, NOTICE }
@@ -191,6 +199,7 @@ data class GhostlockLogLine(val text: String, val color: Int)
 
 interface GhostlockActions {
     fun onRun()
+    fun onModeChanged(mode: ExploitMode)
     fun onProfileInvalid()
     fun onStatusClick()
     fun onCloseExecutionSheet()
@@ -820,13 +829,18 @@ private fun MainContent(
             )
         }
         item(key = "run") {
+            val ghostKeyMode = state.mode == ExploitMode.GHOSTKEY
             RunButton(
                 running = state.running,
-                supported = state.kernelSupported &&
-                        state.executionHasProfile &&
-                        (!state.shizukuEnabled ||
-                                state.shizukuStatus == ShizukuStatus.READY),
-                profileValid = state.profileInvalidPaths.isEmpty(),
+                supported = if (ghostKeyMode) {
+                    state.ghostkeyMatched
+                } else {
+                    state.kernelSupported &&
+                            state.executionHasProfile &&
+                            (!state.shizukuEnabled ||
+                                    state.shizukuStatus == ShizukuStatus.READY)
+                },
+                profileValid = ghostKeyMode || state.profileInvalidPaths.isEmpty(),
                 labelRes = R.string.action_run,
                 onClick = actions::onRun,
                 onBlockedClick = actions::onProfileInvalid,
@@ -843,6 +857,11 @@ private fun ControlPanel(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
+        ExploitModeCard(
+            state = state,
+            onSelect = actions::onModeChanged,
+            modifier = Modifier.fillMaxWidth(),
+        )
         ActivationStatusCard(
             supported = state.kernelSupported,
             profileAvailable = state.executionHasProfile,
@@ -851,7 +870,9 @@ private fun ControlPanel(
             shizukuStatus = state.shizukuStatus,
             onParametersClick = actions::onOpenParameters,
             onShizukuClick = actions::onStatusClick,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
         )
         DeviceInfoCard(
             deviceName = state.deviceName,
@@ -920,6 +941,101 @@ private fun ControlPanel(
                 title = stringResource(R.string.advanced_settings),
                 summary = stringResource(R.string.advanced_settings_summary),
                 onClick = actions::onOpenAdvanced,
+            )
+        }
+    }
+}
+
+/**
+ * Exploit engine selector: GhostLock / GhostKey, exactly one active. The
+ * per-row summary doubles as the detection verdict for the current kernel.
+ */
+@Composable
+private fun ExploitModeCard(
+    state: GhostlockUiState,
+    onSelect: (ExploitMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = !state.running
+    Card(modifier = modifier) {
+        ExploitModeRow(
+            title = stringResource(R.string.module_ghostlock_title),
+            summary = if (state.kernelSupported) {
+                stringResource(R.string.module_ghostlock_summary)
+            } else {
+                stringResource(R.string.mode_ghostlock_unmatched)
+            },
+            selected = state.mode == ExploitMode.GHOSTLOCK,
+            enabled = enabled,
+            onClick = { onSelect(ExploitMode.GHOSTLOCK) },
+        )
+        ExploitModeRow(
+            title = stringResource(R.string.module_ghostkey_title),
+            summary = when {
+                state.ghostkeyMatched -> stringResource(
+                    R.string.mode_ghostkey_matched,
+                    state.ghostkeyMatchedRelease.orEmpty(),
+                )
+
+                else -> stringResource(R.string.mode_ghostkey_unmatched)
+            },
+            selected = state.mode == ExploitMode.GHOSTKEY,
+            enabled = enabled,
+            onClick = { onSelect(ExploitMode.GHOSTKEY) },
+        )
+        if (!enabled) {
+            Text(
+                text = stringResource(R.string.module_busy_other_running),
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onBackgroundVariant,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExploitModeRow(
+    title: String,
+    summary: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled) {
+                    MiuixTheme.colorScheme.onSurface
+                } else {
+                    MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
+                },
+            )
+            Text(
+                text = summary,
+                fontSize = 13.sp,
+                color = MiuixTheme.colorScheme.onBackgroundVariant,
+            )
+        }
+        if (selected) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircleOutline,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.primary,
             )
         }
     }

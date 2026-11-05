@@ -275,13 +275,13 @@
     <string name="fallback_label">回退路由</string>
     <string name="fallback_none">无</string>
     <string name="field_fallback_to">回退目标</string>
-    <!-- GhostLock Suite 外壳首页 -->
-    <string name="suite_home_title">GhostLock Suite</string>
+    <!-- 主界面提权模式选择 -->
     <string name="module_ghostlock_title">GhostLock 幽灵锁</string>
     <string name="module_ghostlock_summary">CVE-2026-43499 · PI-futex 内核提权</string>
     <string name="module_ghostkey_title">GhostKey 幽灵钥</string>
     <string name="module_ghostkey_summary">CVE-2026-98260 · Shizuku + NDK 提权</string>
-    <string name="suite_home_footer">仅供设备所有者授权下的安全研究使用。</string>
-    <string name="module_running_summary">执行中…</string>
-    <string name="module_busy_other_running">占用中：GhostLock 提权执行中，完成后才能启动 GhostKey。</string>
+    <string name="mode_ghostlock_unmatched">当前内核未命中 GhostLock profile。</string>
+    <string name="mode_ghostkey_unmatched">当前内核未命中 GhostKey profile。</string>
+    <string name="mode_ghostkey_matched">命中 profile：%1$s</string>
+    <string name="module_busy_other_running">占用中：另一提权引擎执行中，完成后才能切换。</string>
 </resources>
