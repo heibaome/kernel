@@ -22,6 +22,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.ghostlock.app.GhostlockApplication
 import com.ghostlock.app.R
+import com.ghostlock.app.ghostkey.GhostKeyEngineBridge
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<GhostlockViewModel> {

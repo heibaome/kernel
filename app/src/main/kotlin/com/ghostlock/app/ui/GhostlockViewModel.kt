@@ -1260,6 +1260,10 @@ class GhostlockViewModel(
             DocumentRequest.UefiImage -> uris.firstOrNull()?.let(::stageUefi)
             DocumentRequest.VendorBootImage -> uris.firstOrNull()?.let(::stageVendorBoot)
             DocumentRequest.PayloadImage -> uris.firstOrNull()?.let(::stagePayload)
+
+            /* GhostKey boot.img import is single-pick only (onDocumentResult);
+             * the multi picker never issues it. */
+            DocumentRequest.GhostKeyBootImg -> Unit
         }
     }
 
@@ -1719,6 +1723,8 @@ class GhostlockViewModel(
                     overwrite = true,
                 )
             }
+
+            is PendingConfirmation.GhostKeyStart -> runGhostKey()
         }
     }
 
