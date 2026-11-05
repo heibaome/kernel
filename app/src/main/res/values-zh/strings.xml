@@ -279,7 +279,7 @@
     <string name="risk_confirm_title">高风险操作确认</string>
     <string name="risk_confirm_disclaimer">此功能仅供设备适配者与安全研究者在真机验证时使用。错误使用可能导致内核崩溃、数据损坏甚至设备变砖，一切后果由您自行承担，开发者对任何损失概不负责。</string>
     <string name="risk_confirm_agree">我已阅读并理解上述风险，自愿承担全部后果</string>
-    <string name="risk_confirm_wait">请仔细阅读（%1$d 秒）</string>
+    <string name="risk_confirm_hint">请仔细阅读以上内容，%1$d 秒后可确认</string>
     <string name="risk_confirm_confirm">确认执行</string>
     <string name="risk_body_force">即将开启强制攻击测试：执行前的内核状态预检（含 KernelSU 接管检测）将被跳过，即使内核本应拒绝也会强制执行。</string>
     <string name="risk_body_override">即将进入内核偏移字段覆写页面，任何错误数值都可能在执行时引发内核崩溃或设备变砖。</string>

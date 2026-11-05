@@ -32,9 +32,10 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 15 秒不可跳过的风险确认：倒计时走完 + 勾选同意后才能确认；
- * 点外部与返回键无效（onDismissRequest 为空），只能通过按钮取消或确认。
- * 组件与配色沿用应用现有对话框体系（OverlayDialog + TextButton 行 + 原生 Checkbox）。
+ * 15 秒风险确认：倒计时走完 + 勾选同意后才能确认（不可跳过的是确认门槛）。
+ * 返回键/侧滑/点外部按取消处理，与其它对话框一致地播放退场动画
+ * （show 驱动动画，onDismissFinished 在动画结束后才触发 VM 状态清理）。
+ * 倒计时独立成提示行，按钮文案固定，两按钮尺寸稳定对齐。
  */
 @Composable
 fun RiskConfirmDialog(
@@ -44,6 +45,8 @@ fun RiskConfirmDialog(
     val kind = state.riskConfirm ?: return
     var secondsLeft by remember(kind) { mutableIntStateOf(RISK_CONFIRM_SECONDS) }
     var agreed by remember(kind) { mutableStateOf(false) }
+    var visible by remember(kind) { mutableStateOf(true) }
+    var exitAction by remember(kind) { mutableStateOf<(() -> Unit)?>(null) }
 
     LaunchedEffect(kind) {
         while (secondsLeft > 0) {
@@ -52,8 +55,13 @@ fun RiskConfirmDialog(
         }
     }
 
+    val close: (() -> Unit) -> Unit = { after ->
+        exitAction = after
+        visible = false
+    }
+
     OverlayDialog(
-        show = true,
+        show = visible,
         title = stringResource(R.string.risk_confirm_title),
         /* 功能针对性风险说明走 summary 槽位，与现有对话框层次一致。 */
         summary = when (kind) {
@@ -64,8 +72,9 @@ fun RiskConfirmDialog(
                 state.riskPendingRelease ?: "?",
             )
         },
-        /* 不可跳过：点外部/返回不关闭，仅按钮可退出。 */
-        onDismissRequest = {},
+        /* 返回/点外部 = 取消：可退出、有动画；危险动作仍被确认门槛挡住。 */
+        onDismissRequest = { close(null) },
+        onDismissFinished = { (exitAction ?: actions::onRiskDismiss).invoke() },
         content = {
             Column {
                 Text(
@@ -97,6 +106,14 @@ fun RiskConfirmDialog(
                         )
                     }
                 }
+                if (secondsLeft > 0) {
+                    Text(
+                        text = stringResource(R.string.risk_confirm_hint, secondsLeft),
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -105,23 +122,19 @@ fun RiskConfirmDialog(
                     TextButton(
                         modifier = Modifier.weight(1f),
                         text = stringResource(R.string.cancel),
-                        onClick = actions::onRiskDismiss,
+                        onClick = { close(null) },
                     )
                     Spacer(Modifier.width(12.dp))
                     TextButton(
                         modifier = Modifier.weight(1f),
                         enabled = agreed && secondsLeft == 0,
-                        text = if (secondsLeft > 0) {
-                            stringResource(R.string.risk_confirm_wait, secondsLeft)
-                        } else {
-                            stringResource(R.string.risk_confirm_confirm)
-                        },
+                        text = stringResource(R.string.risk_confirm_confirm),
                         colors = if (agreed && secondsLeft == 0) {
                             ButtonDefaults.textButtonColorsPrimary()
                         } else {
                             ButtonDefaults.textButtonColors()
                         },
-                        onClick = actions::onRiskConfirm,
+                        onClick = { close(actions::onRiskConfirm) },
                     )
                 }
             }
