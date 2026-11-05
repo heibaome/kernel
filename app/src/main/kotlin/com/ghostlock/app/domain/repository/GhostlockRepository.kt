@@ -22,7 +22,7 @@ interface GhostlockRepository {
     /** Skip the pre-attack KernelSU check and run the exploit as a test. */
     fun setForceAttackTest(enabled: Boolean)
 
-    fun setShizukuEnabled(enabled: Boolean)
+    fun setShizukuEnabled(enabled: Boolean, requestPermission: Boolean = true)
 
     /** Live Shizuku status for the active engine path (no snapshot round-trip). */
     fun shizukuStatus(): ShizukuStatus

@@ -1066,6 +1066,9 @@ class GhostlockViewModel(
             return
         }
         engineUserSelected = true
+        /* GhostKey 硬依赖 Shizuku：把偏好持久化，避免返回页面后的快照刷新
+         * 因"用户从未显式设置"回落到 recommendShizuku 而把开关打回关闭。 */
+        if (engine == ExploitEngine.GHOSTKEY) repository.setShizukuEnabled(true, requestPermission = false)
         mutableState.update {
             it.copy(
                 engine = engine,

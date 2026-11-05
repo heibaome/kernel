@@ -193,7 +193,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
         preferences.edit { putBoolean(PrefForceAttackTest, enabled) }
     }
 
-    override fun setShizukuEnabled(enabled: Boolean) {
+    override fun setShizukuEnabled(enabled: Boolean, requestPermission: Boolean) {
         shizukuEnabled = enabled
         shizukuPreferenceSet = true
         appContext.getSharedPreferences("ghostlock_prefs", Context.MODE_PRIVATE)
@@ -201,7 +201,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
                 putBoolean("shizuku_enabled", enabled)
                 putBoolean("shizuku_explicit", true)
             }
-        if (enabled) shizukuRunner.requestPermission()
+        if (enabled && requestPermission) shizukuRunner.requestPermission()
     }
 
     override fun selectedManagerPackage(): String? =
