@@ -5,7 +5,7 @@ plugins {
     id("com.android.library")
     // AGP 9.1 内置 Kotlin（与宿主 app 模块同一路径，不 apply org.jetbrains.kotlin.android；
     // 同一构建内混用内置与外置 Kotlin 插件有冲突风险）
-    id("org.jetbrains.kotlin.plugin.compose")
+    // 引擎融合后本模块为纯逻辑库（无 Compose UI），compose 插件与依赖已移除
 }
 
 val appVersionName = "1.1.4"
@@ -31,7 +31,6 @@ android {
     }
 
     buildFeatures {
-        compose = true
         aidl = true
     }
 
@@ -60,15 +59,6 @@ kotlin {
 }
 
 dependencies {
-    // Compose（BOM 对齐 ghostlock 主工程使用的 1.12.x compose runtime 由 app 侧统一仲裁）
-    implementation(platform("androidx.compose:compose-bom:2024.10.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
-
     // Shizuku
     val shizukuVersion = "13.1.5"
     implementation("dev.rikka.shizuku:api:$shizukuVersion")
@@ -79,7 +69,6 @@ dependencies {
 
     // Core
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
 
     // 单测：StageTracker 的纯逻辑验证
     testImplementation("junit:junit:4.13.2")

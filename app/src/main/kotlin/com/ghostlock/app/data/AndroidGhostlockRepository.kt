@@ -10,10 +10,8 @@ import androidx.core.net.toUri
 import com.ghostlock.app.BuildConfig
 import com.ghostlock.app.BuildInfo
 import com.ghostlock.app.data.ManagerScanner
-import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.DebugSettings
-import com.ghostlock.app.domain.model.ExploitMode
 import com.ghostlock.app.domain.model.KernelSnapshot
 import com.ghostlock.app.domain.model.OffsetCandidate
 import com.ghostlock.app.data.ota.OtaPayloadExtractor
@@ -24,8 +22,6 @@ import com.ghostlock.app.domain.model.UserProfileFile
 import com.ghostlock.app.domain.repository.GhostlockRepository
 import com.ghostlock.app.domain.repository.ProfileConfigController
 import com.ghostlock.app.shizuku.ShizukuExploitRunner
-import com.GhostKey.app.device.GhostKeySupportProbe
-import com.GhostKey.app.device.KernelProbe as GhostKeyKernelProbe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -45,7 +41,6 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
     private companion object {
         const val OffsetsFileName = "offsets.conf"
         const val LegacyOffsetsFileName = "offsets.json"
-        const val PrefExploitModeOverride = "exploit_mode_override"
         const val UserProfilesDirectoryName = "user_profiles"
         const val EditSessionPreferences = "ghostlock_edit_session"
         const val ExtractBinaryName = "libextract.so"
@@ -85,7 +80,6 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
         directory = File(filesDir, UserProfilesDirectoryName),
         assetLoader = assetConfigLoader,
     )
-    private val cloudProfiles = CloudProfileUpdater(userProfileStore, preferences)
     private val profileController = AndroidProfileConfigController(
         appContext,
         filesDir,
@@ -212,25 +206,6 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
 
     override fun setSelectedManagerPackage(pkg: String?) {
         preferences.edit { putString(ManagerScanner.PREF_KEY, pkg) }
-    }
-
-    override fun ghostKeyMatchedRelease(): String? {
-        /* Disk-backed resolution (user layer re-read per call); keep it off the
-         * main thread where callers already run it in a worker dispatcher. */
-        return GhostKeySupportProbe.matchedRelease(
-            appContext,
-            GhostKeyKernelProbe.read(),
-        )
-    }
-
-    override fun savedExploitMode(): ExploitMode? =
-        preferences.getString(PrefExploitModeOverride, null)
-            ?.let { runCatching { ExploitMode.valueOf(it) }.getOrNull() }
-
-    override fun saveExploitMode(mode: ExploitMode?) {
-        preferences.edit {
-            if (mode == null) remove(PrefExploitModeOverride) else putString(PrefExploitModeOverride, mode.name)
-        }
     }
 
     override suspend fun installedManagers(): List<ManagerScanner.Candidate> =
@@ -747,35 +722,19 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
                     sizeBytes = stored.sizeBytes,
                     parseError = stored.parseError,
                     version = stored.version,
-                    fromCloud = cloudProfiles.isManaged(stored.name),
                 )
             }
         }
 
-    override suspend fun cloudProfileSource(): String =
-        withContext(Dispatchers.IO) { cloudProfiles.source() }
-
-    override fun setCloudProfileSource(url: String) {
-        cloudProfiles.setSource(url)
-    }
-
-    override suspend fun updateCloudProfiles(): CloudProfileUpdateResult = cloudProfiles.update()
-
     override suspend fun deleteUserProfile(name: String): Boolean {
         val deleted = withContext(Dispatchers.IO) { userProfileStore.delete(name) }
-        if (deleted) {
-            profileController.onUserProfileDeleted(name)
-            cloudProfiles.forget(name)
-        }
+        if (deleted) profileController.onUserProfileDeleted(name)
         return deleted
     }
 
     override suspend fun renameUserProfile(name: String, newName: String): String? {
         val renamed = withContext(Dispatchers.IO) { userProfileStore.rename(name, newName) }
-        if (renamed != null) {
-            profileController.onUserProfileRenamed(name, renamed)
-            cloudProfiles.adopt(name, renamed)
-        }
+        if (renamed != null) profileController.onUserProfileRenamed(name, renamed)
         return renamed
     }
 

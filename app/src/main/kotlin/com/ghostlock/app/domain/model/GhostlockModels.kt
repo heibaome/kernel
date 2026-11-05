@@ -24,12 +24,6 @@ data class KernelSnapshot(
 
 enum class ShizukuStatus { NOT_REQUIRED, NOT_RUNNING, PERMISSION_REQUIRED, READY }
 
-/**
- * Which exploit engine the unified main UI drives. The two engines attack the
- * kernel through different primitives and must never run concurrently.
- */
-enum class ExploitMode { GHOSTLOCK, GHOSTKEY }
-
 enum class LogTone { Default, Error, Success, Warning, Progress, Kotlin, Shizuku }
 
 data class LogEntry(val text: String, val tone: LogTone)
@@ -45,28 +39,7 @@ data class UserProfileFile(
     val parseError: Boolean,
     /** 1 = legacy layout (load only), 2 = current layout (editable). */
     val version: Int = 2,
-    /** Installed by the cloud profile update, not imported by hand. */
-    val fromCloud: Boolean = false,
 )
-
-/** Result of a manual cloud profile pack update. */
-sealed interface CloudProfileUpdateResult {
-    /**
-     * [added] and [updated] name the releases that came in new or with
-     * changed documents; [unchanged] counts byte-identical ones.
-     */
-    data class Success(
-        val added: List<String>,
-        val updated: List<String>,
-        val unchanged: Int,
-    ) : CloudProfileUpdateResult
-
-    data class ChecksumFailed(val expected: String) : CloudProfileUpdateResult
-
-    data class InvalidPack(val reason: String) : CloudProfileUpdateResult
-
-    data class Failed(val reason: String) : CloudProfileUpdateResult
-}
 
 /** One editable advisory execution value (PROFILE-SUGGEST-01 / profile-ui). */
 data class ExecutionFieldValue(

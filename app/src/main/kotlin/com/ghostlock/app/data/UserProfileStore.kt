@@ -57,7 +57,11 @@ internal class UserProfileStore(
      * The converter is idempotent, so a document that it would still move or
      * rewrite is an old-layout one; stored text stays untouched either way.
      */
-    private fun needsConversion(entry: ValueMap): Boolean = isLegacyProfileEntry(entry)
+    private fun needsConversion(entry: ValueMap): Boolean {
+        val converted = entry.copyValue().asValueMap() ?: return true
+        LegacyProfileConverter.convertValue(converted)
+        return converted != entry
+    }
 
     /** Releases carried by the stored document [name], in document order. */
     fun releasesOf(name: String): List<String> {
@@ -289,15 +293,4 @@ internal class UserProfileStore(
     private fun ensureExists() {
         if (!directory.isDirectory) directory.mkdirs()
     }
-}
-
-/**
- * The converter is idempotent, so an entry it would still move or rewrite is
- * an old-layout (v1) document. Shared with the cloud update validation so a
- * downloaded pack is held to the same current-layout-only rule.
- */
-internal fun isLegacyProfileEntry(entry: ValueMap): Boolean {
-    val converted = entry.copyValue().asValueMap() ?: return true
-    LegacyProfileConverter.convertValue(converted)
-    return converted != entry
 }

@@ -168,18 +168,6 @@
     <string name="user_profile_rename_confirm">Rename</string>
     <string name="user_profile_renamed">Profile renamed</string>
     <string name="user_profile_rename_failed">Could not rename the profile</string>
-    <string name="cloud_profiles_check">Check cloud profile updates</string>
-    <string name="cloud_profiles_source">Update source</string>
-    <string name="cloud_profiles_source_hint">Profile pack URL (empty restores the default)</string>
-    <string name="cloud_profiles_source_saved">Update source saved</string>
-    <string name="cloud_profiles_updating">Checking cloud profiles…</string>
-    <string name="cloud_profile_up_to_date">Cloud profiles are up to date</string>
-    <string name="cloud_profile_updated_message">%1$d added, %2$d updated, %3$d unchanged</string>
-    <string name="cloud_profile_update_failed">Cloud profile update failed</string>
-    <string name="cloud_profile_checksum_failed">Checksum mismatch; the pack was not installed</string>
-    <string name="cloud_profile_pack_invalid">The downloaded profile pack is invalid</string>
-    <string name="cloud_profile_source_invalid">The update source must be an http(s) URL</string>
-    <string name="cloud_profile_badge">Cloud</string>
     <string name="user_profile_delete_title">Delete profile</string>
     <string name="user_profile_delete_message">Delete %1$s?</string>
     <string name="user_profile_deleted">Profile deleted</string>
@@ -275,13 +263,35 @@
     <string name="fallback_label">Fallback route</string>
     <string name="fallback_none">None</string>
     <string name="field_fallback_to">fallback_to</string>
-    <!-- Exploit mode selector on the unified main screen -->
+    <string name="module_running_summary">Running…</string>
+    <string name="module_busy_other_running">Busy: GhostLock exploit in progress. Wait for it to finish before launching GhostKey.</string>
+    <!-- GhostLock Suite 外壳首页 -->
+    <string name="suite_home_title">GhostLock Suite</string>
     <string name="module_ghostlock_title">GhostLock</string>
     <string name="module_ghostlock_summary">CVE-2026-43499 · PI-futex kernel exploit</string>
     <string name="module_ghostkey_title">GhostKey</string>
     <string name="module_ghostkey_summary">CVE-2026-98260 · Shizuku + NDK exploit</string>
-    <string name="mode_ghostlock_unmatched">No GhostLock profile matches this kernel.</string>
-    <string name="mode_ghostkey_unmatched">No GhostKey profile matches this kernel.</string>
-    <string name="mode_ghostkey_matched">Matched profile: %1$s</string>
-    <string name="module_busy_other_running">Busy: an exploit is running. Switching engines is disabled until it finishes.</string>
+    <string name="suite_home_footer">For authorized security research on devices you own only.</string>
+    <!-- Dual-engine selector (GhostLock / GhostKey) -->
+    <string name="engine_label">Exploit engine</string>
+    <string name="engine_ghostlock">GhostLock (CVE-2026-43499)</string>
+    <string name="engine_ghostlock_summary">PI-futex kernel exploit · W1/W2/W3 chain</string>
+    <string name="engine_ghostkey">GhostKey (CVE-2026-98260)</string>
+    <string name="engine_ghostkey_summary">fput UAF · Shizuku + NDK pipeline</string>
+    <string name="engine_support_in_range">Kernel in affected range</string>
+    <string name="engine_support_unknown">Kernel support unknown</string>
+    <string name="engine_support_out_of_range">Kernel out of affected range</string>
+    <!-- GhostKey profile (simplified) -->
+    <string name="ghostkey_profile_label">GhostKey profile</string>
+    <string name="ghostkey_profile_auto">Auto match current kernel</string>
+    <string name="ghostkey_profile_matched">Matched: %1$s</string>
+    <string name="ghostkey_profile_missing">No matching profile — import a boot.img below</string>
+    <string name="ghostkey_import_boot">Import boot.img</string>
+    <string name="ghostkey_import_boot_summary">Parse a boot image to build the offset profile</string>
+    <string name="ghostkey_delete_profile">Delete profile %1$s</string>
+    <!-- GhostKey merged safety confirmation -->
+    <string name="ghostkey_confirm_title">Run GhostKey?</string>
+    <string name="ghostkey_confirm_body">GhostKey runs a CVE-2026-98260 exploit pipeline (calibration, injection of a native payload, verification, KernelSU handoff). Injecting the payload SO carries brick risk. Run only on a device you own, for authorized security research.</string>
+    <string name="ghostkey_confirm_body_out_of_range">Kernel release is OUTSIDE the verified range for CVE-2026-98260. Vendor backports may exist without a version change; running may fail or destabilize the device, including brick risk from payload injection. Continue at your own risk?</string>
+    <string name="ghostkey_shizuku_required">GhostKey engine requires Shizuku — the toggle cannot be turned off</string>
 </resources>

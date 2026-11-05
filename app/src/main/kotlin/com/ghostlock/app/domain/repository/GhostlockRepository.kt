@@ -1,10 +1,8 @@
 package com.ghostlock.app.domain.repository
 
 import com.ghostlock.app.data.ManagerScanner
-import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.DebugSettings
-import com.ghostlock.app.domain.model.ExploitMode
 import com.ghostlock.app.domain.model.KernelSnapshot
 import com.ghostlock.app.domain.model.OffsetCandidate
 import com.ghostlock.app.domain.model.OffsetImportResult
@@ -14,19 +12,6 @@ import com.ghostlock.app.domain.model.UserProfileFile
 
 interface GhostlockRepository {
     suspend fun snapshot(): KernelSnapshot
-
-    /**
-     * GhostKey engine support probe: the profile release matched for the
-     * current kernel (exact match against GhostKey builtin/user profiles),
-     * or null when the kernel is not covered.
-     */
-    fun ghostKeyMatchedRelease(): String?
-
-    /** Persisted manual mode override, or null when the auto detection applies. */
-    fun savedExploitMode(): ExploitMode?
-
-    /** Persist a manual mode override; null clears it back to auto. */
-    fun saveExploitMode(mode: ExploitMode?)
 
     fun selectCpuPair(index: Int)
 
@@ -73,14 +58,6 @@ interface GhostlockRepository {
 
     /** Verbatim user-imported documents, newest first. */
     suspend fun userProfiles(): List<UserProfileFile>
-
-    /** Configured cloud profile pack URL; the pre-release default when blank. */
-    suspend fun cloudProfileSource(): String
-
-    fun setCloudProfileSource(url: String)
-
-    /** Manual cloud update: download, verify, validate and install the pack. */
-    suspend fun updateCloudProfiles(): CloudProfileUpdateResult
 
     suspend fun deleteUserProfile(name: String): Boolean
 

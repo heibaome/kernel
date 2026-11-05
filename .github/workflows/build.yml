@@ -62,17 +62,8 @@ jobs:
       # （ghostlock 的 make/cargo 链仍走 ONDK，互不影响）
       - name: Set up Android SDK components for :ghostkey
         run: |
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          SDKMGR="$(command -v sdkmanager || find "$SDK_ROOT" /usr/local/lib/android -type f -name sdkmanager 2>/dev/null | head -1)"
-          if [ -z "$SDKMGR" ]; then
-            echo "sdkmanager not found; ANDROID_SDK_ROOT=$SDK_ROOT" >&2
-            find / -maxdepth 7 -type f -name sdkmanager 2>/dev/null | head -5 >&2
-            exit 1
-          fi
-          echo "sdkmanager: $SDKMGR (sdk root: $SDK_ROOT)"
-          yes | "$SDKMGR" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
-          "$SDKMGR" --sdk_root="$SDK_ROOT" --install "cmake;3.22.1" "ndk;28.2.13676358"
-          "$SDKMGR" --sdk_root="$SDK_ROOT" --list_installed | grep -E "cmake|ndk"
+          yes | sdkmanager --install "cmake;3.22.1" "ndk;28.2.13676358" > /dev/null
+          sdkmanager --list_installed | grep -E "cmake|ndk" || true
 
       - name: Cache ONDK
         id: ondk-cache
@@ -118,18 +109,9 @@ jobs:
         run: |
           "${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all build/native/ghostlock || true
 
-      # splits.abi = arm64-v8a（非 universal）→ APK 落在 app/build/outputs/apk/arm64/release/
-      # 用 find 定位而不是写死路径：模块 build 目录与 archivesName 命名都可能变。
+      # splits.abi = arm64-v8a（非 universal）→ APK 输出在 apk/arm64/release/ 下
       - name: Rename Release APK
-        run: |
-          APK=$(find . -type f -path '*/outputs/apk/*' -name '*-release.apk' | sort | head -1)
-          if [ -z "$APK" ]; then
-            echo "no *-release.apk under */outputs/apk/*" >&2
-            find . -type f -name '*.apk' -not -path './.git/*' | head -20 >&2
-            exit 1
-          fi
-          echo "apk: $APK ($(stat -c%s "$APK") bytes)"
-          mv "$APK" GhostLock-Suite-release.apk
+        run: mv build/app/outputs/apk/arm64/release/*-release.apk GhostLock-Suite-release.apk
 
       - name: Prepare extractor binaries
         run: |
@@ -191,9 +173,6 @@ jobs:
   build-extractor-macos:
     name: Build Extractor (macOS)
     runs-on: macos-latest
-    # macOS runner 长期排队/幽灵 in_progress（曾把整个 run 卡住 30 分钟以上），
-    # 它只是可选产物：失败或超时不得拖垮发版与其它产物。
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -265,9 +244,7 @@ jobs:
 
   prerelease:
     name: Pre-release
-    # 只等"必须"的产物：APK 与 Windows 提取器。macOS 提取器是可选项
-    # （continue-on-error），不参与 needs，否则 macOS runner 排队会把发版一起卡死。
-    needs: [build-apk, build-extractor-windows]
+    needs: [build-apk, build-extractor-macos, build-extractor-windows]
     runs-on: ubuntu-latest
     if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.ref_type != 'tag' }}
     permissions:
@@ -375,8 +352,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   post_telegram:
-    # 同上：不依赖 macOS 可选产物，避免通知任务排在 macOS runner 后面。
-    needs: [build-apk, build-extractor-windows]
+    needs: [build-apk, build-extractor-macos, build-extractor-windows]
     runs-on: ubuntu-latest
     if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.ref_type != 'tag' }}
     steps:

@@ -20,15 +20,19 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.GhostKey.app.ui.GhostKeyActivity
 import com.ghostlock.app.GhostlockApplication
 import com.ghostlock.app.R
-import com.ghostlock.app.domain.model.ExploitMode
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<GhostlockViewModel> {
         viewModelFactory {
-            initializer { GhostlockViewModel((application as GhostlockApplication).createRepository()) }
+            initializer {
+                val app = application as GhostlockApplication
+                GhostlockViewModel(
+                    repository = app.createRepository(),
+                    ghostKeyBridge = GhostKeyEngineBridge(app),
+                )
+            }
         }
     }
 
@@ -71,8 +75,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         viewModel.initialize()
         setContent {
-            // 统一主界面：GhostLock 的 Miuix UI 即唯一首页，提权引擎
-            // （GhostLock / GhostKey）由界面内的模式选择行切换。
+            // 双引擎融合：GhostLock 主界面为唯一 UI，提权引擎二选一
+            // （EngineCard 切换，默认选设备支持的模式），不再有独立外壳首页。
             GhostlockRoute(viewModel, ::handleEffect)
         }
         setupSystemBars()
@@ -125,14 +129,6 @@ class MainActivity : ComponentActivity() {
             GhostlockEffect.OpenShizuku -> packageManager
                 .getLaunchIntentForPackage(SHIZUKU_PACKAGE)
                 ?.let(::startActivity)
-
-            GhostlockEffect.OpenGhostKey -> {
-                // 跨引擎互斥：GhostLock exploit 执行中不拉起 GhostKey，
-                // 防止两个内核 exploit（PI-futex 与 UAF）并发攻击同一内核。
-                if (!viewModel.state.value.running) {
-                    startActivity(Intent(this@MainActivity, GhostKeyActivity::class.java))
-                }
-            }
         }
     }
 
@@ -182,7 +178,20 @@ private fun GhostlockRoute(
         state = state,
         actions = object : GhostlockActions {
             override fun onRun() = viewModel.onRun()
-            override fun onModeChanged(mode: ExploitMode) = viewModel.onModeChanged(mode)
+            override fun onEngineSelected(engine: ExploitEngine) =
+                viewModel.onEngineSelected(engine)
+
+            override fun onGhostKeyImportBoot() {
+                pendingDocumentRequest = DocumentRequest.GhostKeyBootImg
+                documentPicker.launch(arrayOf("*/*"))
+            }
+
+            override fun onGhostKeyProfileSelected(fileName: String?) =
+                viewModel.onGhostKeyProfileSelected(fileName)
+
+            override fun onGhostKeyProfileDeleted(fileName: String) =
+                viewModel.onGhostKeyProfileDeleted(fileName)
+
             override fun onProfileInvalid() = viewModel.onProfileInvalid()
             override fun onStatusClick() = viewModel.onStatusClick()
             override fun onCloseExecutionSheet() = viewModel.onCloseExecutionSheet()
@@ -246,8 +255,6 @@ private fun GhostlockRoute(
             override fun onUserProfileDelete(name: String) = viewModel.onUserProfileDelete(name)
             override fun onUserProfileDeleteConfirm() = viewModel.onUserProfileDeleteConfirm()
             override fun onUserProfileDeleteDismiss() = viewModel.onUserProfileDeleteDismiss()
-            override fun onCheckCloudProfiles() = viewModel.onCheckCloudProfiles()
-            override fun onEditCloudProfileSource() = viewModel.onEditCloudProfileSource()
             override fun onOpenBuiltinProfiles() = viewModel.onOpenBuiltinProfiles()
             override fun onCloseBuiltinProfiles() = viewModel.onCloseBuiltinProfiles()
             override fun onSelectBuiltinProfile(release: String?) =

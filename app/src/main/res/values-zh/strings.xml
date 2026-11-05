@@ -168,18 +168,6 @@
     <string name="user_profile_rename_confirm">重命名</string>
     <string name="user_profile_renamed">已重命名</string>
     <string name="user_profile_rename_failed">重命名失败（可能同名）</string>
-    <string name="cloud_profiles_check">检查云端配置更新</string>
-    <string name="cloud_profiles_source">更新源</string>
-    <string name="cloud_profiles_source_hint">配置包链接（留空恢复默认）</string>
-    <string name="cloud_profiles_source_saved">更新源已保存</string>
-    <string name="cloud_profiles_updating">正在检查云端配置…</string>
-    <string name="cloud_profile_up_to_date">云端配置已是最新</string>
-    <string name="cloud_profile_updated_message">新增 %1$d 个，更新 %2$d 个，未变化 %3$d 个</string>
-    <string name="cloud_profile_update_failed">云端配置更新失败</string>
-    <string name="cloud_profile_checksum_failed">校验和不匹配，配置包未安装</string>
-    <string name="cloud_profile_pack_invalid">下载的配置包无效</string>
-    <string name="cloud_profile_source_invalid">更新源必须是 http(s) 链接</string>
-    <string name="cloud_profile_badge">云端</string>
     <string name="user_profile_delete_title">删除配置</string>
     <string name="user_profile_delete_message">确定删除 %1$s？</string>
     <string name="user_profile_deleted">已删除</string>
@@ -275,13 +263,35 @@
     <string name="fallback_label">回退路由</string>
     <string name="fallback_none">无</string>
     <string name="field_fallback_to">回退目标</string>
-    <!-- 主界面提权模式选择 -->
+    <!-- GhostLock Suite 外壳首页 -->
+    <string name="suite_home_title">GhostLock Suite</string>
     <string name="module_ghostlock_title">GhostLock 幽灵锁</string>
     <string name="module_ghostlock_summary">CVE-2026-43499 · PI-futex 内核提权</string>
     <string name="module_ghostkey_title">GhostKey 幽灵钥</string>
     <string name="module_ghostkey_summary">CVE-2026-98260 · Shizuku + NDK 提权</string>
-    <string name="mode_ghostlock_unmatched">当前内核未命中 GhostLock profile。</string>
-    <string name="mode_ghostkey_unmatched">当前内核未命中 GhostKey profile。</string>
-    <string name="mode_ghostkey_matched">命中 profile：%1$s</string>
-    <string name="module_busy_other_running">占用中：提权执行中，完成后才能切换引擎。</string>
+    <string name="suite_home_footer">仅供设备所有者授权下的安全研究使用。</string>
+    <string name="module_running_summary">执行中…</string>
+    <string name="module_busy_other_running">占用中：GhostLock 提权执行中，完成后才能启动 GhostKey。</string>
+    <!-- 双引擎选择器（GhostLock / GhostKey） -->
+    <string name="engine_label">提权引擎</string>
+    <string name="engine_ghostlock">GhostLock（CVE-2026-43499）</string>
+    <string name="engine_ghostlock_summary">PI-futex 内核提权 · W1/W2/W3 链</string>
+    <string name="engine_ghostkey">GhostKey（CVE-2026-98260）</string>
+    <string name="engine_ghostkey_summary">fput UAF · Shizuku + NDK 流水线</string>
+    <string name="engine_support_in_range">内核在漏洞影响范围内</string>
+    <string name="engine_support_unknown">内核支持性未知</string>
+    <string name="engine_support_out_of_range">内核不在影响范围内</string>
+    <!-- GhostKey profile（精简版） -->
+    <string name="ghostkey_profile_label">GhostKey Profile</string>
+    <string name="ghostkey_profile_auto">自动匹配当前内核</string>
+    <string name="ghostkey_profile_matched">已匹配：%1$s</string>
+    <string name="ghostkey_profile_missing">未匹配到 profile —— 请在下方导入 boot.img</string>
+    <string name="ghostkey_import_boot">导入 boot.img</string>
+    <string name="ghostkey_import_boot_summary">解析 boot 镜像生成偏移 profile</string>
+    <string name="ghostkey_delete_profile">删除 profile %1$s</string>
+    <!-- GhostKey 合并安全确认 -->
+    <string name="ghostkey_confirm_title">运行 GhostKey？</string>
+    <string name="ghostkey_confirm_body">GhostKey 将执行 CVE-2026-98260 提权流水线（校准、注入 native payload、校验、KernelSU 接管）。注入 payload 存在变砖风险。仅限自有设备上的授权安全研究。</string>
+    <string name="ghostkey_confirm_body_out_of_range">当前内核版本不在 CVE-2026-98260 已验证范围内。厂商可能未改版本号就回移植修复；继续执行可能失败或导致设备不稳定，注入 payload 亦有变砖风险。仍要继续吗？</string>
+    <string name="ghostkey_shizuku_required">GhostKey 引擎依赖 Shizuku —— 开关不可关闭</string>
 </resources>
