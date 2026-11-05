@@ -16,6 +16,10 @@ class ImportOffsetsUseCase(private val repository: GhostlockRepository) {
     suspend fun overwrite(documents: Map<String, String>) = repository.confirmImport(documents)
 }
 
+class UpdateCloudProfilesUseCase(private val repository: GhostlockRepository) {
+    suspend operator fun invoke() = repository.updateCloudProfiles()
+}
+
 class ParseSourceUseCase(private val repository: GhostlockRepository) {
     suspend operator fun invoke(
         input: String,

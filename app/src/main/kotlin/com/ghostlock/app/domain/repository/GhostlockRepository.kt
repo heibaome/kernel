@@ -1,6 +1,7 @@
 package com.ghostlock.app.domain.repository
 
 import com.ghostlock.app.data.ManagerScanner
+import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.DebugSettings
 import com.ghostlock.app.domain.model.KernelSnapshot
@@ -58,6 +59,14 @@ interface GhostlockRepository {
 
     /** Verbatim user-imported documents, newest first. */
     suspend fun userProfiles(): List<UserProfileFile>
+
+    /** Configured cloud profile pack URL; the pre-release default when blank. */
+    suspend fun cloudProfileSource(): String
+
+    fun setCloudProfileSource(url: String)
+
+    /** Manual cloud update: download, verify, validate and install the pack. */
+    suspend fun updateCloudProfiles(): CloudProfileUpdateResult
 
     suspend fun deleteUserProfile(name: String): Boolean
 

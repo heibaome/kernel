@@ -255,6 +255,8 @@ private fun GhostlockRoute(
             override fun onUserProfileDelete(name: String) = viewModel.onUserProfileDelete(name)
             override fun onUserProfileDeleteConfirm() = viewModel.onUserProfileDeleteConfirm()
             override fun onUserProfileDeleteDismiss() = viewModel.onUserProfileDeleteDismiss()
+            override fun onCheckCloudProfiles() = viewModel.onCheckCloudProfiles()
+            override fun onEditCloudProfileSource() = viewModel.onEditCloudProfileSource()
             override fun onOpenBuiltinProfiles() = viewModel.onOpenBuiltinProfiles()
             override fun onCloseBuiltinProfiles() = viewModel.onCloseBuiltinProfiles()
             override fun onSelectBuiltinProfile(release: String?) =

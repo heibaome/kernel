@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">GhostLock</string>
+    <string name="app_name">GhostSuite</string>
     <string name="action_run">执行</string>
     <string name="action_running">执行中…</string>
     <string name="advanced_settings">高级选项</string>
@@ -294,4 +294,17 @@
     <string name="ghostkey_confirm_body">GhostKey 将执行 CVE-2026-98260 提权流水线（校准、注入 native payload、校验、KernelSU 接管）。注入 payload 存在变砖风险。仅限自有设备上的授权安全研究。</string>
     <string name="ghostkey_confirm_body_out_of_range">当前内核版本不在 CVE-2026-98260 已验证范围内。厂商可能未改版本号就回移植修复；继续执行可能失败或导致设备不稳定，注入 payload 亦有变砖风险。仍要继续吗？</string>
     <string name="ghostkey_shizuku_required">GhostKey 引擎依赖 Shizuku —— 开关不可关闭</string>
+    <!-- 云端配置包更新 -->
+    <string name="cloud_profiles_check">检查云端配置更新</string>
+    <string name="cloud_profiles_source">更新源</string>
+    <string name="cloud_profiles_source_hint">配置包链接（留空恢复默认）</string>
+    <string name="cloud_profiles_source_saved">更新源已保存</string>
+    <string name="cloud_profiles_updating">正在检查云端配置…</string>
+    <string name="cloud_profile_up_to_date">云端配置已是最新</string>
+    <string name="cloud_profile_updated_message">新增 %1$d 个，更新 %2$d 个，未变化 %3$d 个</string>
+    <string name="cloud_profile_update_failed">云端配置更新失败</string>
+    <string name="cloud_profile_checksum_failed">校验和不匹配，配置包未安装</string>
+    <string name="cloud_profile_pack_invalid">下载的配置包无效</string>
+    <string name="cloud_profile_source_invalid">更新源必须是 http(s) 链接</string>
+    <string name="cloud_profile_badge">云端</string>
 </resources>

@@ -5,6 +5,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghostlock.app.R
+import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.KernelSnapshot
 import com.ghostlock.app.domain.model.LogTone
@@ -22,6 +23,7 @@ import com.ghostlock.app.domain.usecase.ParseSourceUseCase
 import com.ghostlock.app.domain.usecase.ReadDocumentUseCase
 import com.ghostlock.app.domain.usecase.RunExploitUseCase
 import com.ghostlock.app.domain.usecase.SelectCpuPairUseCase
+import com.ghostlock.app.domain.usecase.UpdateCloudProfilesUseCase
 import com.ghostlock.app.ghostkey.GhostKeyEngineBridge
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -71,6 +73,7 @@ class GhostlockViewModel(
     private var initialized = false
     private var running = false
     private val loadKernelSnapshot = LoadKernelSnapshotUseCase(repository)
+    private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)
     private val selectCpuPairUseCase = SelectCpuPairUseCase(repository)
     private val importOffsetsUseCase = ImportOffsetsUseCase(repository)
     private val parseSourceUseCase = ParseSourceUseCase(repository)
@@ -93,6 +96,8 @@ class GhostlockViewModel(
     private var pendingAttachOptions: List<AttachOption> = emptyList()
     private var parseDialogStage = ParseDialogStage.Mode
     private var pendingConfirmation: PendingConfirmation? = null
+    /** The open INPUT dialog edits the cloud profile source, not a URL parse. */
+    private var cloudSourceEditPending = false
 
     fun initialize() {
         if (initialized) return
@@ -106,6 +111,8 @@ class GhostlockViewModel(
             refreshSnapshot()
             applyRecommendedShizuku()
             maybeSuggestShizukuForW3()
+            val source = runCatching { repository.cloudProfileSource() }.getOrDefault("")
+            mutableState.update { it.copy(cloudProfileSource = source) }
         }
     }
 
@@ -453,6 +460,86 @@ class GhostlockViewModel(
 
     fun onUserProfileDeleteDismiss() {
         mutableState.update { it.copy(userProfileDeleteTarget = null) }
+    }
+
+    /** Manual cloud profile update: download, verify and install the pack. */
+    fun onCheckCloudProfiles() {
+        if (state.value.cloudProfileUpdating) return
+        mutableState.update { it.copy(cloudProfileUpdating = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching { updateCloudProfiles() }.getOrNull()
+            refreshUserProfiles()
+            refreshSnapshot()
+            mutableState.update { it.copy(cloudProfileUpdating = false) }
+            when (result) {
+                is CloudProfileUpdateResult.Success -> {
+                    appendLog(
+                        "cloud profiles: ${result.added.size} added, " +
+                            "${result.updated.size} updated, ${result.unchanged} unchanged",
+                    )
+                    val noChanges = result.added.isEmpty() && result.updated.isEmpty()
+                    showNotice(
+                        R.string.cloud_profiles_check,
+                        if (noChanges) R.string.cloud_profile_up_to_date
+                        else R.string.cloud_profile_updated_message,
+                        messageArgs = listOf(
+                            result.added.size.toString(),
+                            result.updated.size.toString(),
+                            result.unchanged.toString(),
+                        ),
+                    )
+                }
+
+                is CloudProfileUpdateResult.ChecksumFailed -> {
+                    appendLog("cloud profiles: checksum mismatch (expected ${result.expected})")
+                    showNotice(R.string.cloud_profiles_check, R.string.cloud_profile_checksum_failed)
+                }
+
+                is CloudProfileUpdateResult.InvalidPack -> {
+                    appendLog("cloud profiles: invalid pack (${result.reason})")
+                    showNotice(R.string.cloud_profiles_check, R.string.cloud_profile_pack_invalid)
+                }
+
+                else -> {
+                    val reason = (result as? CloudProfileUpdateResult.Failed)?.reason
+                        ?: "update failed"
+                    appendLog("cloud profiles: $reason")
+                    showNotice(R.string.cloud_profiles_check, R.string.cloud_profile_update_failed)
+                }
+            }
+        }
+    }
+
+    /** Opens the shared INPUT dialog to edit the cloud update source URL. */
+    fun onEditCloudProfileSource() {
+        cloudSourceEditPending = true
+        mutableState.update {
+            it.copy(
+                dialogVisible = true,
+                dialogType = DialogType.INPUT,
+                dialogTitleRes = R.string.cloud_profiles_source,
+                dialogMessageRes = R.string.cloud_profiles_source_hint,
+                dialogInput = state.value.cloudProfileSource,
+                dialogConfirmLabelRes = R.string.profile_save,
+            )
+        }
+    }
+
+    private fun saveCloudProfileSource(value: String) {
+        val url = value.trim()
+        if (url.isNotEmpty() && !url.startsWith("http://", true) &&
+            !url.startsWith("https://", true)
+        ) {
+            send(GhostlockEffect.Toast(R.string.cloud_profile_source_invalid))
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            /* An empty value restores the built-in default source. */
+            repository.setCloudProfileSource(url)
+            val effective = runCatching { repository.cloudProfileSource() }.getOrDefault(url)
+            mutableState.update { it.copy(cloudProfileSource = effective) }
+            send(GhostlockEffect.Toast(R.string.cloud_profiles_source_saved))
+        }
     }
 
     fun onShowAbout() {
@@ -1200,9 +1287,12 @@ class GhostlockViewModel(
     fun onDialogConfirm(value: String) {
         val dialogType = state.value.dialogType
         val renameTarget = state.value.userProfileRenameTarget
+        val cloudSourceEdit = cloudSourceEditPending
         dismissDialog(clearConfirmation = false)
+        cloudSourceEditPending = false
         when {
             renameTarget != null -> renameUserProfile(renameTarget, value)
+            cloudSourceEdit -> saveCloudProfileSource(value)
             dialogType == DialogType.INPUT -> parseUrl(value)
             dialogType == DialogType.CONFIRM -> when (pendingConfirmation) {
                 is PendingConfirmation.GhostKeyStart -> {
@@ -1487,13 +1577,19 @@ class GhostlockViewModel(
 
     /** Confirm/notice popup for an extractor outcome; unlike a Toast it waits
      * for the user and can link the matching documentation page. */
-    private fun showNotice(titleRes: Int, messageRes: Int, docUrl: String? = null) {
+    private fun showNotice(
+        titleRes: Int,
+        messageRes: Int,
+        docUrl: String? = null,
+        messageArgs: List<String> = emptyList(),
+    ) {
         mutableState.update {
             it.copy(
                 dialogVisible = true,
                 dialogType = DialogType.NOTICE,
                 dialogTitleRes = titleRes,
                 dialogMessageRes = messageRes,
+                dialogMessageArgs = messageArgs,
                 dialogDocUrl = docUrl,
                 dialogConfirmLabelRes = R.string.dialog_dismiss,
             )

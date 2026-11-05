@@ -10,6 +10,7 @@ import androidx.core.net.toUri
 import com.ghostlock.app.BuildConfig
 import com.ghostlock.app.BuildInfo
 import com.ghostlock.app.data.ManagerScanner
+import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.DebugSettings
 import com.ghostlock.app.domain.model.KernelSnapshot
@@ -80,6 +81,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
         directory = File(filesDir, UserProfilesDirectoryName),
         assetLoader = assetConfigLoader,
     )
+    private val cloudProfiles = CloudProfileUpdater(userProfileStore, preferences)
     private val profileController = AndroidProfileConfigController(
         appContext,
         filesDir,
@@ -722,19 +724,35 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
                     sizeBytes = stored.sizeBytes,
                     parseError = stored.parseError,
                     version = stored.version,
+                    fromCloud = cloudProfiles.isManaged(stored.name),
                 )
             }
         }
 
+    override suspend fun cloudProfileSource(): String =
+        withContext(Dispatchers.IO) { cloudProfiles.source() }
+
+    override fun setCloudProfileSource(url: String) {
+        cloudProfiles.setSource(url)
+    }
+
+    override suspend fun updateCloudProfiles(): CloudProfileUpdateResult = cloudProfiles.update()
+
     override suspend fun deleteUserProfile(name: String): Boolean {
         val deleted = withContext(Dispatchers.IO) { userProfileStore.delete(name) }
-        if (deleted) profileController.onUserProfileDeleted(name)
+        if (deleted) {
+            profileController.onUserProfileDeleted(name)
+            cloudProfiles.forget(name)
+        }
         return deleted
     }
 
     override suspend fun renameUserProfile(name: String, newName: String): String? {
         val renamed = withContext(Dispatchers.IO) { userProfileStore.rename(name, newName) }
-        if (renamed != null) profileController.onUserProfileRenamed(name, renamed)
+        if (renamed != null) {
+            profileController.onUserProfileRenamed(name, renamed)
+            cloudProfiles.adopt(name, renamed)
+        }
         return renamed
     }
 

@@ -122,6 +122,10 @@ data class GhostlockUiState(
     val ghostKeyStoredProfiles: List<GhostKeyProfileSummary> = emptyList(),
     /** GhostKey 手动选用的 profile release；null = 自动匹配当前内核。 */
     val ghostKeySelectedRelease: String? = null,
+    /** Cloud profile pack source shown on the load-configuration screen. */
+    val cloudProfileSource: String = "",
+    /** True while a manual cloud profile update is running. */
+    val cloudProfileUpdating: Boolean = false,
     val kernelRelease: String = "",
     val socName: String = "",
     val kernelSupported: Boolean = false,
@@ -143,6 +147,8 @@ data class GhostlockUiState(
     val dialogTitleRes: Int = 0,
     val dialogMessage: String = "",
     val dialogMessageRes: Int = 0,
+    /** Format arguments for [dialogMessageRes]; empty means no formatting. */
+    val dialogMessageArgs: List<String> = emptyList(),
     val dialogItems: List<String> = emptyList(),
     val dialogItemResIds: List<Int> = emptyList(),
     val dialogCurrentItemIndex: Int = -1,
@@ -271,6 +277,8 @@ interface GhostlockActions {
     fun onUserProfileDelete(name: String)
     fun onUserProfileDeleteConfirm()
     fun onUserProfileDeleteDismiss()
+    fun onCheckCloudProfiles()
+    fun onEditCloudProfileSource()
     fun onOpenBuiltinProfiles()
     fun onCloseBuiltinProfiles()
     fun onSelectBuiltinProfile(release: String?)
@@ -433,7 +441,7 @@ private fun MainScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = "GhostLock",
+                title = "GhostSuite",
                 scrollBehavior = scrollBehavior,
             )
         },
@@ -748,7 +756,14 @@ private fun GhostlockDialog(
 
                 DialogType.NOTICE -> {
                     Text(
-                        text = stringResource(state.dialogMessageRes),
+                        text = if (state.dialogMessageArgs.isEmpty()) {
+                            stringResource(state.dialogMessageRes)
+                        } else {
+                            stringResource(
+                                state.dialogMessageRes,
+                                *state.dialogMessageArgs.toTypedArray(),
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,

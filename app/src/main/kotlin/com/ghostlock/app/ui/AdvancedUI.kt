@@ -400,6 +400,31 @@ internal fun LoadConfigScreen(
                     )
                 }
             }
+            item(key = "cloud") {
+                Column(modifier = Modifier.preferencePageItem()) {
+                    if (state.cloudProfileUpdating) {
+                        ProfileHintBanner(
+                            text = stringResource(R.string.cloud_profiles_updating),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Card {
+                        Column {
+                            ArrowPreference(
+                                title = stringResource(R.string.cloud_profiles_check),
+                                summary = state.cloudProfileSource,
+                                onClick = actions::onCheckCloudProfiles,
+                            )
+                            ArrowPreference(
+                                title = stringResource(R.string.cloud_profiles_source),
+                                summary = stringResource(R.string.cloud_profiles_source_hint),
+                                onClick = actions::onEditCloudProfileSource,
+                            )
+                        }
+                    }
+                }
+            }
             item(key = "user-title") {
                 SmallTitle(text = stringResource(R.string.user_profiles_title))
             }
@@ -469,6 +494,15 @@ private fun UserProfileCard(
             summary = "$status\n$metadata",
             onClick = onClick,
             endActions = {
+                if (profile.fromCloud) {
+                    Text(
+                        text = stringResource(R.string.cloud_profile_badge),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
                 Text(
                     text = "v${profile.version}",
                     fontSize = 13.sp,
