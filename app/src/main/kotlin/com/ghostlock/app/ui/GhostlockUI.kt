@@ -325,6 +325,8 @@ internal fun navigationPath(state: GhostlockUiState): List<GhostlockScreen> {
     val path = mutableListOf<GhostlockScreen>(GhostlockScreen.Main)
     if (state.ghostKeyConfigVisible) {
         path += GhostlockScreen.GhostKeyConfig
+        /* GK 配置页内的「关于」叠加在配置页之上（与 GL 分支同一处理）。 */
+        if (state.aboutVisible) path += GhostlockScreen.About
         return path
     }
     if (!state.advancedScreenVisible) return path
