@@ -1170,32 +1170,42 @@ private fun GhostKeyProfileCard(
     }
     val selectedIndex = if (selectedFile == null) 0 else 1 +
         state.ghostKeyStoredProfiles.indexOf(selectedFile)
-    Card(modifier = modifier) {
-        OverlaySpinnerPreference(
-            title = stringResource(R.string.ghostkey_profile_label),
-            summary = state.ghostKeyProfileRelease?.let {
-                stringResource(R.string.ghostkey_profile_matched, it)
-            } ?: stringResource(R.string.ghostkey_profile_missing),
-            items = items,
-            selectedIndex = selectedIndex,
-            showValue = false,
-            onSelectedIndexChange = { index ->
-                onProfileSelected(
-                    if (index <= 0) null else state.ghostKeyStoredProfiles.getOrNull(index - 1)?.fileName,
-                )
-            },
-        )
-        ArrowPreference(
-            title = stringResource(R.string.ghostkey_import_boot),
-            summary = stringResource(R.string.ghostkey_import_boot_summary),
-            onClick = onImportBoot,
-        )
-        if (selectedFile != null) {
-            ArrowPreference(
-                title = stringResource(R.string.ghostkey_delete_profile, selectedFile.fileName),
-                summary = null,
-                onClick = { onProfileDeleted(selectedFile.fileName) },
+    /* 与 GL 配置页一致：每个条目独立成卡，而非一张大卡混排。 */
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Card {
+            OverlaySpinnerPreference(
+                title = stringResource(R.string.ghostkey_profile_label),
+                summary = state.ghostKeyProfileRelease?.let {
+                    stringResource(R.string.ghostkey_profile_matched, it)
+                } ?: stringResource(R.string.ghostkey_profile_missing),
+                items = items,
+                selectedIndex = selectedIndex,
+                showValue = false,
+                onSelectedIndexChange = { index ->
+                    onProfileSelected(
+                        if (index <= 0) null else state.ghostKeyStoredProfiles.getOrNull(index - 1)?.fileName,
+                    )
+                },
             )
+        }
+        Card {
+            ArrowPreference(
+                title = stringResource(R.string.ghostkey_import_boot),
+                summary = stringResource(R.string.ghostkey_import_boot_summary),
+                onClick = onImportBoot,
+            )
+        }
+        if (selectedFile != null) {
+            Card {
+                ArrowPreference(
+                    title = stringResource(R.string.ghostkey_delete_profile, selectedFile.fileName),
+                    summary = null,
+                    onClick = { onProfileDeleted(selectedFile.fileName) },
+                )
+            }
         }
     }
 }
