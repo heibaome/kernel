@@ -152,7 +152,7 @@ internal fun AdvancedScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = stringResource(R.string.advanced_settings),
+                title = stringResource(R.string.config_title),
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = actions::onCloseAdvanced) {
@@ -191,54 +191,6 @@ internal fun AdvancedScreen(
                         title = stringResource(R.string.parameters),
                         summary = stringResource(R.string.parameters_summary),
                         onClick = actions::onOpenParameters,
-                    )
-                }
-            }
-            item(key = "export") {
-                Card {
-                    Column {
-                        SwitchPreference(
-                            checked = state.debugExportEnabled,
-                            onCheckedChange = actions::onDebugExportChanged,
-                            title = stringResource(R.string.debug_export_log),
-                            summary = stringResource(R.string.debug_export_log_summary),
-                        )
-                        AnimatedVisibility(
-                            visible = state.debugExportEnabled,
-                            enter = expandVertically(),
-                            exit = shrinkVertically(),
-                        ) {
-                            Column {
-                                ArrowPreference(
-                                    title = stringResource(R.string.debug_export_location),
-                                    summary = state.debugExportLocation,
-                                    onClick = actions::onDebugExportLocationPick,
-                                )
-                                SwitchPreference(
-                                    checked = state.debugKernelLogEnabled,
-                                    onCheckedChange = actions::onDebugKernelLogChanged,
-                                    title = stringResource(R.string.debug_kernel_log),
-                                    summary = stringResource(R.string.debug_kernel_log_summary),
-                                )
-                            }
-                        }
-                        if (!BuildConfig.DEBUG) {
-                            Text(
-                                text = stringResource(R.string.debug_build_hint),
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
-                                style = MiuixTheme.textStyles.body2,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
-                        }
-                    }
-                }
-            }
-            item(key = "about") {
-                Card {
-                    ArrowPreference(
-                        title = stringResource(R.string.about),
-                        summary = stringResource(R.string.about_summary),
-                        onClick = actions::onShowAbout,
                     )
                 }
             }

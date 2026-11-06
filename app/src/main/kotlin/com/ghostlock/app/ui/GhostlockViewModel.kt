@@ -125,7 +125,16 @@ class GhostlockViewModel(
             applyRecommendedShizuku()
             maybeSuggestShizukuForW3()
             val source = runCatching { repository.cloudProfileSource() }.getOrDefault("")
-            mutableState.update { it.copy(cloudProfileSource = source) }
+            /* 调试导出卡常驻首页，偏好需在启动时加载（原先仅在进配置页时加载）。 */
+            val settings = runCatching { repository.debugSettings() }.getOrNull()
+            mutableState.update {
+                it.copy(
+                    cloudProfileSource = source,
+                    debugExportEnabled = settings?.exportEnabled ?: true,
+                    debugExportLocation = settings?.exportLocation.orEmpty(),
+                    debugKernelLogEnabled = settings?.kernelLogEnabled ?: true,
+                )
+            }
         }
     }
 
@@ -292,6 +301,27 @@ class GhostlockViewModel(
                 )
             }
         }
+    }
+
+    /* GK 配置页：boot.img 导入与 profile 管理（首页「前往配置」进入）。 */
+    fun onOpenGhostKeyConfig() {
+        mutableState.update {
+            it.copy(
+                ghostKeyConfigVisible = true,
+                advancedScreenVisible = false,
+                aboutVisible = false,
+                parametersVisible = false,
+                loadConfigVisible = false,
+                builtinScreenVisible = false,
+                profileOverrideVisible = false,
+                advancedOverrideVisible = false,
+            )
+        }
+        refreshGhostKeyStatus()
+    }
+
+    fun onCloseGhostKeyConfig() {
+        mutableState.update { it.copy(ghostKeyConfigVisible = false) }
     }
 
     fun onCloseAdvanced() {

@@ -118,7 +118,7 @@ python3 tools/cmp_disasm.py <baseline-binary> build/native/ghostlock
 - 攻击关键路径（waiter/race/payload/route/exec 流程）改动：
   1. `tools/cmp_disasm.py` 对比 8 个攻击函数，要求 IDENTICAL (strict) 或已复核的注解差异；
   2. 真机门禁（冷机、固定 CPU 对、单 route、KernelSU 未加载的干净启动）；
-  3. 日志在设备 `Download/ghostlock-debug-log/<时间>/*.log.txt`（同目录另有
+  3. 日志在设备 `Download/ghostsuite-debug-log/<时间>/*.log.txt`（同目录另有
      `profile.conf`/`profile.bin`，记录本次生效配置与送入 native 的 GLK1 字节），确认 route 命中与写验证通过。
 - 真机结果按 `docs/analysis/device-gates/*.md` 的格式归档（git 历史中有整套
   S/CPP/U01/NS\* 证据链样例）。

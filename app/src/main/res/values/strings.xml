@@ -25,6 +25,11 @@
     <string name="gk_card_need_boot">No GhostKey profile yet</string>
     <string name="gk_card_need_boot_summary">Tap to import boot.img and build the profile on device; once extraction succeeds you can run the exploit</string>
     <string name="gk_card_ready_summary">Boot image parsed successfully — you can run the exploit</string>
+    <string name="config_entry">Open configuration</string>
+    <string name="config_title">Configuration</string>
+    <string name="config_entry_summary_gl">Parameters and forced attack test</string>
+    <string name="config_entry_summary_gk">Import boot.img and manage profiles</string>
+    <string name="ghostkey_config_title">GhostKey configuration</string>
     <string name="import_missing_includes">Missing include files; select them together with the profile and retry</string>
     <string name="offsets_already_exist">Offsets already exist (built-in)</string>
     <string name="overwrite_title">Kernel offsets already exist</string>

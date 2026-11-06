@@ -46,7 +46,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
         const val UserProfilesDirectoryName = "user_profiles"
         const val EditSessionPreferences = "ghostlock_edit_session"
         const val ExtractBinaryName = "libextract.so"
-        const val DefaultDebugLocation = "Download/ghostlock-debug-log"
+        const val DefaultDebugLocation = "Download/ghostsuite-debug-log"
         const val PrefForceAttackTest = "force_attack_test"
         const val PrefDebugExportEnabled = "debug_export_enabled"
         const val PrefDebugExportLocation = "debug_export_location"

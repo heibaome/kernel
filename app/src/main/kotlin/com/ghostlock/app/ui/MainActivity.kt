@@ -238,6 +238,8 @@ private fun GhostlockRoute(
             override fun onRevertProfileEdits() = viewModel.onRevertProfileEdits()
             override fun onOpenAdvanced() = viewModel.onOpenAdvanced()
             override fun onCloseAdvanced() = viewModel.onCloseAdvanced()
+            override fun onOpenGhostKeyConfig() = viewModel.onOpenGhostKeyConfig()
+            override fun onCloseGhostKeyConfig() = viewModel.onCloseGhostKeyConfig()
             override fun onShowAbout() = viewModel.onShowAbout()
             override fun onCloseAbout() = viewModel.onCloseAbout()
             override fun onDebugExportChanged(enabled: Boolean) = viewModel.onDebugExportChanged(enabled)

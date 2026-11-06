@@ -138,6 +138,11 @@
     <string name="gk_card_need_boot">Ainda sem perfil do GhostKey</string>
     <string name="gk_card_need_boot_summary">Toque para importar o boot.img e gerar o perfil no próprio aparelho; assim que a extração for concluída você poderá executar a elevação</string>
     <string name="gk_card_ready_summary">Imagem de boot analisada com sucesso — pronto para executar a elevação</string>
+    <string name="config_entry">Abrir configuração</string>
+    <string name="config_title">Configuração</string>
+    <string name="config_entry_summary_gl">Parâmetros e teste de ataque forçado</string>
+    <string name="config_entry_summary_gk">Importar boot.img e gerenciar perfis</string>
+    <string name="ghostkey_config_title">Configuração do GhostKey</string>
 <string name="import_missing_includes">Arquivos de inclusão ausentes; selecione-os junto com o perfil e tente novamente</string>
 <string name="import_no_match">Importado, mas seu lançamento não corresponde a este kernel e não será aplicado</string>
 <string name="import_result_title">Resultado da importação</string>

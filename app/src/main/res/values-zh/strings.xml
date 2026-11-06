@@ -25,6 +25,11 @@
     <string name="gk_card_need_boot">尚未获取 GhostKey profile</string>
     <string name="gk_card_need_boot_summary">点按导入 boot.img，在本机解析生成 profile；解析成功后即可执行提权</string>
     <string name="gk_card_ready_summary">boot 镜像解析成功，可直接执行提权</string>
+    <string name="config_entry">前往配置</string>
+    <string name="config_title">配置</string>
+    <string name="config_entry_summary_gl">参数配置、强制攻击测试</string>
+    <string name="config_entry_summary_gk">导入 boot.img、管理 profile</string>
+    <string name="ghostkey_config_title">GhostKey 配置</string>
     <string name="import_missing_includes">缺少 include 依赖文件，请将依赖文件与配置一并选中后重试</string>
     <string name="offsets_already_exist">偏移已存在（内置）</string>
     <string name="overwrite_title">已存在偏移数据</string>

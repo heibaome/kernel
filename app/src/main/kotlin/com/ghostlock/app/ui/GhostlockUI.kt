@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ghostlock.app.BuildConfig
 import com.ghostlock.app.R
 import com.ghostlock.app.data.ManagerScanner
 import com.ghostlock.app.domain.model.CpuPair
@@ -168,6 +172,7 @@ data class GhostlockUiState(
     val executionFields: List<ExecutionFieldValue> = emptyList(),
     val executionEditing: Map<String, String> = emptyMap(),
     val advancedScreenVisible: Boolean = false,
+    val ghostKeyConfigVisible: Boolean = false,
     val debugExportEnabled: Boolean = true,
     val debugExportLocation: String = "",
     val debugKernelLogEnabled: Boolean = true,
@@ -268,6 +273,8 @@ interface GhostlockActions {
     fun onRevertProfileEdits()
     fun onOpenAdvanced()
     fun onCloseAdvanced()
+    fun onOpenGhostKeyConfig()
+    fun onCloseGhostKeyConfig()
     fun onShowAbout()
     fun onCloseAbout()
     fun onDebugExportChanged(enabled: Boolean)
@@ -303,6 +310,7 @@ interface GhostlockActions {
 internal sealed interface GhostlockScreen : NavKey {
     data object Main : GhostlockScreen
     data object Advanced : GhostlockScreen
+    data object GhostKeyConfig : GhostlockScreen
     data object About : GhostlockScreen
     data object Parameters : GhostlockScreen
     data object LoadConfig : GhostlockScreen
@@ -314,6 +322,10 @@ internal sealed interface GhostlockScreen : NavKey {
 
 internal fun navigationPath(state: GhostlockUiState): List<GhostlockScreen> {
     val path = mutableListOf<GhostlockScreen>(GhostlockScreen.Main)
+    if (state.ghostKeyConfigVisible) {
+        path += GhostlockScreen.GhostKeyConfig
+        return path
+    }
     if (!state.advancedScreenVisible) return path
     path += GhostlockScreen.Advanced
     if (state.aboutVisible) {
@@ -352,6 +364,7 @@ private fun closeScreen(screen: GhostlockScreen, actions: GhostlockActions) {
     when (screen) {
         GhostlockScreen.Main -> Unit
         GhostlockScreen.Advanced -> actions.onCloseAdvanced()
+        GhostlockScreen.GhostKeyConfig -> actions.onCloseGhostKeyConfig()
         GhostlockScreen.About -> actions.onCloseAbout()
         GhostlockScreen.Parameters -> actions.onCloseParameters()
         GhostlockScreen.LoadConfig -> actions.onCloseLoadConfig()
@@ -410,6 +423,9 @@ internal fun GhostlockApp(
                     }
                     entry<GhostlockScreen.Advanced>(swipeDismiss = swipeBack) {
                         AdvancedScreen(state = state, actions = actions)
+                    }
+                    entry<GhostlockScreen.GhostKeyConfig>(swipeDismiss = swipeBack) {
+                        GhostKeyConfigScreen(state = state, actions = actions)
                     }
                     entry<GhostlockScreen.About>(swipeDismiss = swipeBack) {
                         AboutScreen(onBack = actions::onCloseAbout)
@@ -979,24 +995,61 @@ private fun ControlPanel(
                 ),
             )
         }
-        if (ghostKeyEngine) {
-            GhostKeyProfileCard(
-                state = state,
-                onImportBoot = actions::onGhostKeyImportBoot,
-                onProfileSelected = actions::onGhostKeyProfileSelected,
-                onProfileDeleted = actions::onGhostKeyProfileDeleted,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-            )
-        } else {
-            Card(modifier = modifier.padding(top = 12.dp)) {
-                ArrowPreference(
-                    title = stringResource(R.string.advanced_settings),
-                    summary = stringResource(R.string.advanced_settings_summary),
-                    onClick = actions::onOpenAdvanced,
+        Card(modifier = modifier.padding(top = 12.dp)) {
+            /* 调试导出为两引擎共用的首页配置（GK 运行日志另存应用私有目录）。 */
+            Column {
+                SwitchPreference(
+                    checked = state.debugExportEnabled,
+                    onCheckedChange = actions::onDebugExportChanged,
+                    title = stringResource(R.string.debug_export_log),
+                    summary = stringResource(R.string.debug_export_log_summary),
                 )
+                AnimatedVisibility(
+                    visible = state.debugExportEnabled,
+                    enter = expandVertically(),
+                    exit = shrinkVertically(),
+                ) {
+                    Column {
+                        ArrowPreference(
+                            title = stringResource(R.string.debug_export_location),
+                            summary = state.debugExportLocation,
+                            onClick = actions::onDebugExportLocationPick,
+                        )
+                        SwitchPreference(
+                            checked = state.debugKernelLogEnabled,
+                            onCheckedChange = actions::onDebugKernelLogChanged,
+                            title = stringResource(R.string.debug_kernel_log),
+                            summary = stringResource(R.string.debug_kernel_log_summary),
+                        )
+                    }
+                }
+                if (!BuildConfig.DEBUG) {
+                    Text(
+                        text = stringResource(R.string.debug_build_hint),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
             }
+        }
+        Card(modifier = modifier.padding(top = 12.dp)) {
+            ArrowPreference(
+                title = stringResource(R.string.about),
+                summary = stringResource(R.string.about_summary),
+                onClick = actions::onShowAbout,
+            )
+        }
+        /* 底部配置入口：按引擎进入各自的配置页。 */
+        Card(modifier = modifier.padding(top = 12.dp)) {
+            ArrowPreference(
+                title = stringResource(R.string.config_entry),
+                summary = stringResource(
+                    if (ghostKeyEngine) R.string.config_entry_summary_gk
+                    else R.string.config_entry_summary_gl,
+                ),
+                onClick = if (ghostKeyEngine) actions::onOpenGhostKeyConfig else actions::onOpenAdvanced,
+            )
         }
     }
 }
@@ -1143,6 +1196,51 @@ private fun GhostKeyProfileCard(
                 summary = null,
                 onClick = { onProfileDeleted(selectedFile.fileName) },
             )
+        }
+    }
+}
+
+/** GhostKey 配置页：boot.img 导入与 profile 管理（首页「前往配置」进入）。 */
+@Composable
+internal fun GhostKeyConfigScreen(
+    state: GhostlockUiState,
+    actions: GhostlockActions,
+) {
+    val scrollBehavior = MiuixScrollBehavior(rememberTopAppBarState())
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = stringResource(R.string.ghostkey_config_title),
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    IconButton(onClick = actions::onCloseGhostKeyConfig) {
+                        Icon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = stringResource(R.string.action_back),
+                        )
+                    }
+                },
+            )
+        },
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
+            contentPadding = pageContentPadding(paddingValues),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "profile") {
+                GhostKeyProfileCard(
+                    state = state,
+                    onImportBoot = actions::onGhostKeyImportBoot,
+                    onProfileSelected = actions::onGhostKeyProfileSelected,
+                    onProfileDeleted = actions::onGhostKeyProfileDeleted,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
