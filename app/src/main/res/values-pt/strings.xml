@@ -132,6 +132,9 @@
 <string name="force_attack_test_label">Teste de ataque forçado</string>
 <string name="force_attack_test_summary">Ignore uma raiz KernelSU existente e execute o exploit de qualquer maneira; o filho enraizado é descartado no final</string>
 <string name="import_failed">Falha na importação</string>
+    <string name="gk_import_ok">Perfil do GhostKey gerado para %1$s</string>
+    <string name="gk_import_ok_missing">Perfil do GhostKey gerado para %1$s, mas faltam campos: %2$s. Ele não pode ser usado até que a imagem os forneça.</string>
+    <string name="gk_import_err">Não foi possível importar a imagem de boot: %1$s</string>
 <string name="import_missing_includes">Arquivos de inclusão ausentes; selecione-os junto com o perfil e tente novamente</string>
 <string name="import_no_match">Importado, mas seu lançamento não corresponde a este kernel e não será aplicado</string>
 <string name="import_result_title">Resultado da importação</string>
@@ -166,7 +169,7 @@
 <string name="manager_show_all">Mostrar todos os aplicativos</string>
 <string name="manager_summary_auto">Automático (recomendado)</string>
 <string name="offsets_already_exist">Os deslocamentos já existem (integrados)</string>
-<string name="opensource_info">Direitos autorais © 2026 heibaome · Baseado em GhostLock por YuKongA (Apache-2.0)</string>
+<string name="opensource_info">Direitos autorais © 2026 YuKongA</string>
 <string name="override_export">Exportar configuração</string>
 <string name="override_export_done">Configuração exportada</string>
 <string name="override_summary">Edite os parâmetros do perfil carregado</string>
@@ -275,16 +278,6 @@ Substituí-los pelos novos valores?"</string>
     <string name="module_running_summary">Executando…</string>
     <string name="module_busy_other_running">Ocupado: exploit GhostLock em andamento. Aguarde antes de iniciar GhostKey.</string>
     <string name="engine_label">Motor de exploração</string>
-    <string name="engine_switch_locked">Motor bloqueado enquanto um exploit está em execução</string>
-    <!-- Confirmação de risco de 15s para funções avançadas -->
-    <string name="risk_confirm_title">Operação de alto risco</string>
-    <string name="risk_confirm_disclaimer">Esta função destina-se a portadores de dispositivos e pesquisadores de segurança que validam perfis em aparelhos reais. Uso incorreto pode travar o kernel, corromper dados ou danificar permanentemente o aparelho. Você assume todas as consequências; os autores não se responsabilizam por quaisquer danos.</string>
-    <string name="risk_confirm_agree">Li e compreendi os riscos acima e assumo integralmente as consequências</string>
-    <string name="risk_confirm_hint">Leia com atenção — você poderá confirmar em %1$ds</string>
-    <string name="risk_confirm_confirm">Confirmar</string>
-    <string name="risk_body_force">Você está prestes a ativar o teste de ataque forçado: as verificações pré-execução do estado do kernel (incluindo detecção do KernelSU) serão ignoradas e o exploit será executado mesmo em kernels que deveriam recusá-lo.</string>
-    <string name="risk_body_override">Você está prestes a abrir a árvore de sobrescrita de offsets do kernel. Qualquer valor errado pode travar o kernel ou danificar o aparelho na execução.</string>
-    <string name="risk_body_builtin">Você está prestes a carregar o perfil interno "%1$s", que não corresponde ao seu kernel atual e é uma combinação experimental.</string>
     <string name="engine_ghostlock">GhostLock (CVE-2026-43499)</string>
     <string name="engine_ghostlock_summary">exploit de kernel PI-futex · cadeia W1/W2/W3</string>
     <string name="engine_ghostkey">GhostKey (CVE-2026-98260)</string>
