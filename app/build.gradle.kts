@@ -13,8 +13,8 @@ plugins {
 // Keep this module's output under the repository-root build/ directory.
 layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("app"))
 
-val appName = "GhostLock"
-val appVersionName = "2.0.2"
+val appName = "GhostSuite"
+val appVersionName = "2.0.3"
 
 val gitVersionCode = runCatching {
     providers.exec {
