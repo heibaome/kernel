@@ -194,6 +194,12 @@ internal fun AdvancedScreen(
                     )
                 }
             }
+            item(key = "debug") {
+                DebugExportCard(state = state, actions = actions)
+            }
+            item(key = "about") {
+                AboutEntryCard(actions = actions)
+            }
         }
     }
 }

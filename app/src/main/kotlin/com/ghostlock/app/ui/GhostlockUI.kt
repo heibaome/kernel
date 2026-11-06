@@ -995,52 +995,7 @@ private fun ControlPanel(
                 ),
             )
         }
-        Card(modifier = modifier.padding(top = 12.dp)) {
-            /* 调试导出为两引擎共用的首页配置（GK 运行日志另存应用私有目录）。 */
-            Column {
-                SwitchPreference(
-                    checked = state.debugExportEnabled,
-                    onCheckedChange = actions::onDebugExportChanged,
-                    title = stringResource(R.string.debug_export_log),
-                    summary = stringResource(R.string.debug_export_log_summary),
-                )
-                AnimatedVisibility(
-                    visible = state.debugExportEnabled,
-                    enter = expandVertically(),
-                    exit = shrinkVertically(),
-                ) {
-                    Column {
-                        ArrowPreference(
-                            title = stringResource(R.string.debug_export_location),
-                            summary = state.debugExportLocation,
-                            onClick = actions::onDebugExportLocationPick,
-                        )
-                        SwitchPreference(
-                            checked = state.debugKernelLogEnabled,
-                            onCheckedChange = actions::onDebugKernelLogChanged,
-                            title = stringResource(R.string.debug_kernel_log),
-                            summary = stringResource(R.string.debug_kernel_log_summary),
-                        )
-                    }
-                }
-                if (!BuildConfig.DEBUG) {
-                    Text(
-                        text = stringResource(R.string.debug_build_hint),
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                }
-            }
-        }
-        Card(modifier = modifier.padding(top = 12.dp)) {
-            ArrowPreference(
-                title = stringResource(R.string.about),
-                summary = stringResource(R.string.about_summary),
-                onClick = actions::onShowAbout,
-            )
-        }
-        /* 底部配置入口：按引擎进入各自的配置页。 */
+        /* 底部配置入口：按引擎进入各自的配置页（debug/关于在配置页内，两页共用）。 */
         Card(modifier = modifier.padding(top = 12.dp)) {
             ArrowPreference(
                 title = stringResource(R.string.config_entry),
@@ -1051,6 +1006,67 @@ private fun ControlPanel(
                 onClick = if (ghostKeyEngine) actions::onOpenGhostKeyConfig else actions::onOpenAdvanced,
             )
         }
+    }
+}
+
+/** 调试导出卡：GL/GK 配置页共用（内核日志导出为 GL 能力；GK 运行日志另存应用私有目录）。 */
+@Composable
+internal fun DebugExportCard(
+    state: GhostlockUiState,
+    actions: GhostlockActions,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Column {
+            SwitchPreference(
+                checked = state.debugExportEnabled,
+                onCheckedChange = actions::onDebugExportChanged,
+                title = stringResource(R.string.debug_export_log),
+                summary = stringResource(R.string.debug_export_log_summary),
+            )
+            AnimatedVisibility(
+                visible = state.debugExportEnabled,
+                enter = expandVertically(),
+                exit = shrinkVertically(),
+            ) {
+                Column {
+                    ArrowPreference(
+                        title = stringResource(R.string.debug_export_location),
+                        summary = state.debugExportLocation,
+                        onClick = actions::onDebugExportLocationPick,
+                    )
+                    SwitchPreference(
+                        checked = state.debugKernelLogEnabled,
+                        onCheckedChange = actions::onDebugKernelLogChanged,
+                        title = stringResource(R.string.debug_kernel_log),
+                        summary = stringResource(R.string.debug_kernel_log_summary),
+                    )
+                }
+            }
+            if (!BuildConfig.DEBUG) {
+                Text(
+                    text = stringResource(R.string.debug_build_hint),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
+    }
+}
+
+/** 关于入口卡：GL/GK 配置页共用。 */
+@Composable
+internal fun AboutEntryCard(
+    actions: GhostlockActions,
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        ArrowPreference(
+            title = stringResource(R.string.about),
+            summary = stringResource(R.string.about_summary),
+            onClick = actions::onShowAbout,
+        )
     }
 }
 
@@ -1250,6 +1266,12 @@ internal fun GhostKeyConfigScreen(
                     onProfileDeleted = actions::onGhostKeyProfileDeleted,
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            item(key = "debug") {
+                DebugExportCard(state = state, actions = actions, modifier = Modifier.fillMaxWidth())
+            }
+            item(key = "about") {
+                AboutEntryCard(actions = actions, modifier = Modifier.fillMaxWidth())
             }
         }
     }
