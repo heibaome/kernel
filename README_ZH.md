@@ -68,6 +68,7 @@ build/extract/release/ghostlock-extract OTA.zip --format conf --out profile.conf
 - [原生核心](src/core/README_ZH.md)
 - [引擎融合记录](docs/MERGE.md)
 - [新增组件](docs/development/adding-a-component_ZH.md)、[工程规范](docs/development/engineering-standards_ZH.md)和[文档规范](docs/development/documentation-standards_ZH.md)
+- [代码审计记录（2026-11）](docs/audit/code-audit-2026-11_ZH.md)——Android 数据层/UI 层发现与修复
 
 ## 来源与许可证
 

@@ -80,6 +80,10 @@ class GhostlockViewModel(
     private val effectChannel = Channel<GhostlockEffect>(Channel.BUFFERED)
     private val mutableState = MutableStateFlow(GhostlockUiState())
     private var initialized = false
+    /* 主线程写（beginOperation）、IO 线程写（endOperation 在 finally 中）：
+     * 不加 @Volatile 时主线程可能读到过期的 true，导致执行键被误判为"正在运行"
+     * 而静默忽略点击。 */
+    @Volatile
     private var running = false
     private val loadKernelSnapshot = LoadKernelSnapshotUseCase(repository)
     private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)

@@ -110,6 +110,19 @@ class CloudProfilePackTest {
     }
 
     @Test
+    fun `extraction caps the document count`() {
+        /* 32 MB of deflate can expand to far more text than the device holds;
+         * the extractor must refuse oversized packs instead of OOM-ing. */
+        val entries = Array(65) { index -> "doc$index.conf" to "release = \"r$index\"" }
+        try {
+            CloudProfilePack.extract(zipOf(*entries))
+            throw AssertionError("expected InvalidPackException")
+        } catch (expected: InvalidPackException) {
+            assertTrue(expected.message!!.contains("too many documents"))
+        }
+    }
+
+    @Test
     fun `validation accepts a current-layout pack`() {
         val documents = mapOf(
             IndexFileName to "profiles = []",

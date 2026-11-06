@@ -31,18 +31,34 @@ internal object CloudProfilePack {
     /** Upper bound for one HOCON document inside the pack. */
     private const val MaxDocumentBytes = 4L * 1024 * 1024
 
+    /* A 32 MB zip can legally carry far more uncompressed text than the device
+     * can hold: deflate ratios near 1000:1 turn it into gigabytes. Cap the
+     * document count and the running total so a hostile or corrupt pack fails
+     * fast instead of OOM-ing the app. */
+    private const val MaxDocuments = 64
+    private const val MaxTotalBytes = 16L * 1024 * 1024
+
     /**
      * Every HOCON document in the zip, keyed by base name (the pack is flat
      * once directories are stripped). Anything else is ignored.
      */
     fun extract(zipBytes: ByteArray): Map<String, String> {
         val documents = linkedMapOf<String, String>()
+        var total = 0L
         ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 val name = entry.name.replace('\\', '/')
                 if (!entry.isDirectory && name.endsWith(".conf")) {
-                    documents[name.substringAfterLast('/')] = readEntry(zip, name)
+                    if (documents.size >= MaxDocuments) {
+                        throw InvalidPackException("too many documents (limit $MaxDocuments)")
+                    }
+                    val text = readEntry(zip, name)
+                    total += text.length
+                    if (total > MaxTotalBytes) {
+                        throw InvalidPackException("pack expands beyond $MaxTotalBytes bytes")
+                    }
+                    documents[name.substringAfterLast('/')] = text
                 }
                 zip.closeEntry()
             }

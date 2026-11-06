@@ -55,9 +55,13 @@ fun RiskConfirmDialog(
         }
     }
 
+    /* 退出动画期间对话框仍可点击：若不加可见性闸门，"取消"后极快地补点
+     * "确认"会把 exitAction 改写成 onRiskConfirm，等于违背用户意图放行高危操作。 */
     val close: ((() -> Unit)?) -> Unit = { after ->
-        exitAction = after
-        visible = false
+        if (visible) {
+            exitAction = after
+            visible = false
+        }
     }
 
     OverlayDialog(

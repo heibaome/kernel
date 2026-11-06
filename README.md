@@ -68,6 +68,7 @@ Import `profile.conf` in the app. Omit `--xbl-config` if you do not have that im
 - [Native core](src/core/README.md)
 - [Engine fusion record](docs/MERGE.md)
 - [Add a component](docs/development/adding-a-component.md), [engineering rules](docs/development/engineering-standards.md), and [writing rules](docs/development/documentation-standards.md)
+- [Code audit (2026-11)](docs/audit/code-audit-2026-11.md) — Android data/UI findings and their fixes
 
 ## Credits and license
 

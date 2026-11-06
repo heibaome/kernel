@@ -21,6 +21,7 @@ class HttpRangeReader(
     ): HttpURLConnection {
         var currentUrl = urlStr
         var redirects = 0
+        val startedSecure = urlStr.startsWith("https://", ignoreCase = true)
         while (redirects < 6) {
             val url = URL(currentUrl)
             val conn = url.openConnection() as HttpURLConnection
@@ -37,7 +38,7 @@ class HttpRangeReader(
                 val location = conn.getHeaderField("Location")
                 conn.disconnect()
                 if (!location.isNullOrBlank()) {
-                    currentUrl = if (location.startsWith(
+                    val next = if (location.startsWith(
                             "http://", ignoreCase = true
                         ) || location.startsWith("https://", ignoreCase = true)
                     ) {
@@ -45,6 +46,12 @@ class HttpRangeReader(
                     } else {
                         URL(url, location).toString()
                     }
+                    /* profile 决定内核偏移，一旦被篡改可直接导致 panic/变砖；
+                     * 因此拒绝 https → http 降级，避免中间人替换下载内容。 */
+                    if (startedSecure && next.startsWith("http://", ignoreCase = true)) {
+                        throw IOException("Refusing insecure redirect from $urlStr to $next")
+                    }
+                    currentUrl = next
                     redirects++
                     continue
                 }

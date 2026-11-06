@@ -653,7 +653,9 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
             }.apply {
                 name = "ksu-log-tailer"
                 isDaemon = true
-                start()
+                /* 不在创建处 start：以下到 try 之前的 ProcessBuilder 组装可能抛
+                 * （如日志目录不可写），那样 finally 永远不会执行，tailer 会失去
+                 * 唯一的 interrupt 点而在整个进程生命周期内空转。 */
             }
             val argv = mutableListOf(
                 binary.absolutePath,
@@ -680,6 +682,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
             onLog("<b> starting native: ${binary.absolutePath}")
             resetRunState()
             try {
+                tailer.start()
                 val nativeCode = runProcess(
                     command,
                     onLog = {},

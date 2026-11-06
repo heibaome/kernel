@@ -129,6 +129,7 @@ python3 tools/cmp_disasm.py <baseline-binary> build/native/ghostlock
   `docs/development/engineering-standards.md`（工程规范，做法与门槛）、
   `docs/development/documentation-standards.md`（文档规范）、`src/core/README.md`、
   `docs/MERGE.md`（GhostLock/GhostKey 融合记录与并发禁令）、
+  `docs/audit/code-audit-2026-11.md`（Android 数据/UI 层审计与修复记录）、
   `docs/analysis/extractor-no-btf-struct-derivation-plan*`（未实施的活跃计划）。
 - 历史文档（已从工作树删除，需要时从 git 历史取回：`git show <commit>:<path>`）：
   - `docs/analysis/`：架构/迁移/解耦分析（routes、native-functions、native-cpp-current-uml、
