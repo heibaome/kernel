@@ -43,6 +43,17 @@ ANDROID_NDK_HOME=... make -C src      # NDK 未自动探测时的显式写法
 python3 tools/cmp_disasm.py <baseline-binary> build/native/ghostlock
 ```
 
+## 构建位置（强制）
+
+**禁止在本地/沙箱执行任何构建或测试命令**（`./gradlew *`、`make -C src`、`cargo build/test`、
+`python3 tools/cmp_disasm.py` 等）。本地环境无外网依赖、拿不到 Maven/Cargo 产物，且工作区会被
+环境回卷，本地构建只会浪费时间并产出误导性失败结论。
+
+- 编译、单元测试、打包**一律交给 GitHub Actions**：提交并推送后，用 Actions 页面或
+  `gh run view <run-id>` 查看结果；失败时从作业日志取真实报错。
+- 上面的“常用命令”是给人类开发者在本机开发时用的，不构成对 agent 的授权。
+- 仅当用户**显式要求**本地执行时才可运行，并在汇报中说明这是用户要求的例外。
+
 ## 改动流程：先设计，后改动（强制）
 
 先读 `docs/development/design-philosophy.md`（设计思想：11 条原则，以 SWEBOK/ISO 12207/ISO 25010
