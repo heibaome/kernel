@@ -192,8 +192,14 @@ class GhostlockViewModel(
             repeat(SHIZUKU_POLL_ATTEMPTS) {
                 delay(SHIZUKU_POLL_INTERVAL_MS)
                 if (state.value.shizukuStatus == ShizukuStatus.READY) return@launch
-                val status = runCatching { repository.shizukuStatus() }
-                    .getOrDefault(ShizukuStatus.NOT_RUNNING)
+                /* 轮询必须走当前引擎自己的栈：GK 下读 GL 栈会因 uid 校验
+                 * （root 模式启动的 Shizuku uid=0 ≠ SHELL_UID）永远判 NOT_RUNNING。 */
+                val status = if (state.value.engine == ExploitEngine.GHOSTKEY) {
+                    ghostKeyBridge.shizukuStatus()
+                } else {
+                    runCatching { repository.shizukuStatus() }
+                        .getOrDefault(ShizukuStatus.NOT_RUNNING)
+                }
                 mutableState.update { it.copy(shizukuStatus = status) }
                 if (status == ShizukuStatus.READY) return@launch
             }
@@ -1482,7 +1488,15 @@ class GhostlockViewModel(
                 } else {
                     snapshot.shizukuEnabled
                 },
-                shizukuStatus = snapshot.shizukuStatus,
+                shizukuStatus = if (it.engine == ExploitEngine.GHOSTKEY) {
+                    /* 快照里的状态来自 GL 栈，其 binder 读数对瞬断敏感且到达晚于
+                     * GK 监听器——会把 GK 授权后刚写入的 READY 异步覆盖回
+                     * NOT_RUNNING（用户看到的"授权了却有时收不到"）。状态按
+                     * 当前引擎从各自的栈读取。 */
+                    ghostKeyBridge.shizukuStatus()
+                } else {
+                    snapshot.shizukuStatus
+                },
                 profileInvalidPaths = loaded?.invalidPaths ?: emptySet(),
                 executionHasProfile = loaded?.hasProfile ?: false,
                 customCpuPair = loaded?.let(::customCpuPairOf),
