@@ -11,7 +11,7 @@
     <string name="about_source_code">Source code</string>
     <string name="about_origins">Project origins</string>
     <string name="about_open_source">Open source licenses</string>
-    <string name="opensource_info">Copyright © 2026 YuKongA</string>
+    <string name="opensource_info">Copyright © 2026 heibaome · Based on GhostLock by YuKongA (Apache-2.0)</string>
     <string name="action_import_offsets_conf">Import offsets.conf (v2)</string>
     <string name="action_import_offsets_json">Import offsets.json (v1)</string>
     <string name="action_parse_ota">Parse OTA link</string>
@@ -277,6 +277,16 @@
     <string name="suite_home_footer">For authorized security research on devices you own only.</string>
     <!-- Dual-engine selector (GhostLock / GhostKey) -->
     <string name="engine_label">Exploit engine</string>
+    <string name="engine_switch_locked">Engine is locked while an exploit is running</string>
+    <!-- 15s risk confirmation for advanced features -->
+    <string name="risk_confirm_title">High-risk operation</string>
+    <string name="risk_confirm_disclaimer">This function is intended for device porters and security researchers validating profiles on real devices. Misuse may crash the kernel, corrupt data, or hard-brick the device. You assume all consequences; the authors take no responsibility for any damage.</string>
+    <string name="risk_confirm_agree">I have read and understood the risks above and accept them in full</string>
+    <string name="risk_confirm_hint">Please read carefully — you can confirm in %1$ds</string>
+    <string name="risk_confirm_confirm">Confirm</string>
+    <string name="risk_body_force">You are about to enable forced attack test: the pre-attack kernel-state checks (KernelSU residency gate) will be skipped and the exploit runs even on kernels it should refuse.</string>
+    <string name="risk_body_override">You are about to open the raw kernel-offset override tree. Any wrong value can crash the kernel or brick the device on execution.</string>
+    <string name="risk_body_builtin">You are about to load builtin profile "%1$s", which does not match your current kernel and is an experimental combination.</string>
     <string name="engine_ghostlock">GhostLock (CVE-2026-43499)</string>
     <string name="engine_ghostlock_summary">PI-futex kernel exploit · W1/W2/W3 chain</string>
     <string name="engine_ghostkey">GhostKey (CVE-2026-98260)</string>

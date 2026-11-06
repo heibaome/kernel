@@ -29,6 +29,7 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -45,9 +46,17 @@ sealed interface GhostlockEffect {
     data class Clipboard(val text: String) : GhostlockEffect
     data class KeepScreenAwake(val enabled: Boolean) : GhostlockEffect
     data object OpenShizuku : GhostlockEffect
+
+    /** GhostKey boot.img import: route the SAF pick through the host activity. */
+    data object PickGhostKeyBootImg : GhostlockEffect
 }
 
 private const val OverwriteSummaryLimit = 12
+
+/* Post-grant Shizuku polling window: covers the grant dialog and grants made
+ * from the Shizuku manager app (which emit no in-process callback). */
+private const val SHIZUKU_POLL_ATTEMPTS = 12
+private const val SHIZUKU_POLL_INTERVAL_MS = 500L
 
 enum class DocumentRequest {
     ImportOffsetsHocon, ImportOffsetsJson, BootImage, XblImage, PayloadImage, UefiImage,
@@ -71,6 +80,10 @@ class GhostlockViewModel(
     private val effectChannel = Channel<GhostlockEffect>(Channel.BUFFERED)
     private val mutableState = MutableStateFlow(GhostlockUiState())
     private var initialized = false
+    /* 主线程写（beginOperation）、IO 线程写（endOperation 在 finally 中）：
+     * 不加 @Volatile 时主线程可能读到过期的 true，导致执行键被误判为"正在运行"
+     * 而静默忽略点击。 */
+    @Volatile
     private var running = false
     private val loadKernelSnapshot = LoadKernelSnapshotUseCase(repository)
     private val updateCloudProfiles = UpdateCloudProfilesUseCase(repository)
@@ -164,6 +177,27 @@ class GhostlockViewModel(
 
     fun refreshAccessStatus() {
         if (initialized) viewModelScope.launch { refreshSnapshot() }
+        /* In GhostKey mode refreshSnapshot would overwrite the card with the
+         * GhostLock runner's status; refresh the bridge's status instead. */
+        if (state.value.engine == ExploitEngine.GHOSTKEY) refreshGhostKeyStatus()
+    }
+
+    /**
+     * Shizuku's permission-grant callback does not fire on every grant path
+     * (e.g. granting from the Shizuku manager app), so after sending a
+     * request, poll the live status briefly until it flips to READY.
+     */
+    private fun pollShizukuUntilReady() {
+        viewModelScope.launch {
+            repeat(SHIZUKU_POLL_ATTEMPTS) {
+                delay(SHIZUKU_POLL_INTERVAL_MS)
+                if (state.value.shizukuStatus == ShizukuStatus.READY) return@launch
+                val status = runCatching { repository.shizukuStatus() }
+                    .getOrDefault(ShizukuStatus.NOT_RUNNING)
+                mutableState.update { it.copy(shizukuStatus = status) }
+                if (status == ShizukuStatus.READY) return@launch
+            }
+        }
     }
 
     /* profile-ui: the controller owns loading, merging and persistence. */
@@ -798,6 +832,17 @@ class GhostlockViewModel(
     }
 
     fun onSelectBuiltinProfile(release: String?) {
+        /* 自动匹配无风险直接选；指定非本机内核版本的 profile 属实验行为，先过风险确认。 */
+        if (release != null) {
+            mutableState.update {
+                it.copy(riskConfirm = RiskConfirmKind.BUILTIN_PROFILE, riskPendingRelease = release)
+            }
+            return
+        }
+        selectBuiltinProfile(null)
+    }
+
+    private fun selectBuiltinProfile(release: String?) {
         val snapshot = kernelSnapshot ?: return
         val pair = snapshot.cpuPairs.getOrNull(snapshot.selectedCpuPair) ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -862,8 +907,8 @@ class GhostlockViewModel(
     }
 
     fun onOpenAdvancedOverrides() {
-        mutableState.update { it.copy(advancedOverrideVisible = true) }
-        loadEditSession()
+        /* 深入字段覆写为高危功能：先过 15 秒风险确认再进入。 */
+        mutableState.update { it.copy(riskConfirm = RiskConfirmKind.ADVANCED_OVERRIDE) }
     }
 
     fun onCloseAdvancedOverrides() {
@@ -927,8 +972,40 @@ class GhostlockViewModel(
     }
 
     fun toggleForceAttackTest(enabled: Boolean) {
-        repository.setForceAttackTest(enabled)
-        mutableState.update { it.copy(forceAttackTestEnabled = enabled) }
+        if (enabled) {
+            /* 开启属于高危操作：强制走 15 秒风险确认，取消/关闭开关不受影响。 */
+            mutableState.update { it.copy(riskConfirm = RiskConfirmKind.FORCE_ATTACK) }
+            return
+        }
+        repository.setForceAttackTest(false)
+        mutableState.update { it.copy(forceAttackTestEnabled = false) }
+    }
+
+    fun onRiskDismiss() {
+        mutableState.update { it.copy(riskConfirm = null, riskPendingRelease = null) }
+    }
+
+    fun onRiskConfirm() {
+        when (state.value.riskConfirm) {
+            RiskConfirmKind.FORCE_ATTACK -> {
+                repository.setForceAttackTest(true)
+                mutableState.update {
+                    it.copy(forceAttackTestEnabled = true, riskConfirm = null)
+                }
+            }
+            RiskConfirmKind.ADVANCED_OVERRIDE -> {
+                mutableState.update {
+                    it.copy(advancedOverrideVisible = true, riskConfirm = null)
+                }
+                loadEditSession()
+            }
+            RiskConfirmKind.BUILTIN_PROFILE -> {
+                val release = state.value.riskPendingRelease
+                mutableState.update { it.copy(riskConfirm = null, riskPendingRelease = null) }
+                if (release != null) selectBuiltinProfile(release)
+            }
+            null -> Unit
+        }
     }
 
     fun toggleShizuku(enabled: Boolean) {
@@ -945,6 +1022,7 @@ class GhostlockViewModel(
         // The grant dialog lands in another app, so the status is re-read and
         // onResume() refreshes it again when the dialog closes.
         viewModelScope.launch { refreshSnapshot() }
+        if (enabled) pollShizukuUntilReady()
     }
 
     fun onOpenManagerPicker() {
@@ -986,7 +1064,11 @@ class GhostlockViewModel(
 
     /** 引擎切换（非运行态才可切换；GhostKey 强制依赖 Shizuku，切换时自动开启）。 */
     fun onEngineSelected(engine: ExploitEngine) {
-        if (running || engine == state.value.engine) return
+        if (engine == state.value.engine) return
+        if (running) {
+            send(GhostlockEffect.Toast(R.string.engine_switch_locked))
+            return
+        }
         engineUserSelected = true
         mutableState.update {
             it.copy(
@@ -1018,6 +1100,7 @@ class GhostlockViewModel(
                 ShizukuStatus.PERMISSION_REQUIRED -> {
                     ghostKeyBridge.requestShizukuPermission()
                     refreshGhostKeyStatus()
+                    pollShizukuUntilReady()
                 }
                 ShizukuStatus.NOT_REQUIRED,
                 ShizukuStatus.READY,
@@ -1030,7 +1113,10 @@ class GhostlockViewModel(
         if (!snapshot.shizukuEnabled) return
         when (snapshot.shizukuStatus) {
             ShizukuStatus.NOT_RUNNING -> send(GhostlockEffect.OpenShizuku)
-            ShizukuStatus.PERMISSION_REQUIRED -> repository.requestShizukuPermission()
+            ShizukuStatus.PERMISSION_REQUIRED -> {
+                repository.requestShizukuPermission()
+                pollShizukuUntilReady()
+            }
             ShizukuStatus.NOT_REQUIRED,
             ShizukuStatus.READY,
                 -> Unit
@@ -1203,6 +1289,9 @@ class GhostlockViewModel(
         send(GhostlockEffect.Toast(R.string.copied))
     }
 
+    /** GhostKey boot.img import: the host activity owns the SAF picker. */
+    fun requestGhostKeyBootImport() = send(GhostlockEffect.PickGhostKeyBootImg)
+
     fun importOffsetsHocon() =
         send(GhostlockEffect.PickDocument(DocumentRequest.ImportOffsetsHocon))
 
@@ -1284,6 +1373,10 @@ class GhostlockViewModel(
             DocumentRequest.UefiImage -> uris.firstOrNull()?.let(::stageUefi)
             DocumentRequest.VendorBootImage -> uris.firstOrNull()?.let(::stageVendorBoot)
             DocumentRequest.PayloadImage -> uris.firstOrNull()?.let(::stagePayload)
+
+            /* GhostKey boot.img import is single-pick only (onDocumentResult);
+             * the multi picker never issues it. */
+            DocumentRequest.GhostKeyBootImg -> Unit
         }
     }
 
@@ -1382,7 +1475,13 @@ class GhostlockViewModel(
                 cpuPairIndex = snapshot.selectedCpuPair,
                 safeModeEnabled = snapshot.safeModeEnabled,
                 forceAttackTestEnabled = snapshot.forceAttackTest,
-                shizukuEnabled = snapshot.shizukuEnabled,
+                /* GhostKey 硬依赖 Shizuku：GK 引擎下开关强制为开（仅内存态，
+                 * 不落盘，避免污染 GL 的偏好）；GL 沿用持久化偏好/推荐值。 */
+                shizukuEnabled = if (it.engine == ExploitEngine.GHOSTKEY) {
+                    true
+                } else {
+                    snapshot.shizukuEnabled
+                },
                 shizukuStatus = snapshot.shizukuStatus,
                 profileInvalidPaths = loaded?.invalidPaths ?: emptySet(),
                 executionHasProfile = loaded?.hasProfile ?: false,
@@ -1743,6 +1842,8 @@ class GhostlockViewModel(
                     overwrite = true,
                 )
             }
+
+            is PendingConfirmation.GhostKeyStart -> runGhostKey()
         }
     }
 
