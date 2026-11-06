@@ -21,6 +21,10 @@ GhostSuite 是双引擎 Android root 提权套件，成功后交由 KernelSU 接
 
 任何自带 `libksud.so` 的 root 管理器都可提供 `ksud` 用于加载模块。内置列表（KernelSU、ReSukiSU、BakaSU、KowSU）会自动检测；其他管理器可在 **设置 → 根管理器** 中手动选择。缺 `ksud` 时 W1/W2 仍可拿到 uid 0，但不会加载模块。
 
+### 与原版 GhostLock / GhostKey 共存
+
+Shizuku 授权**互不冲突**：授权按包名隔离，各应用绑定各自的 UserService 进程；唯一共享的是 Shizuku server 本身（一台设备一个——重启它会波及所有客户端应用，状态卡变 `NOT_RUNNING`，重新启动即可）。**切勿在两个应用中同时执行 exploit**：每个应用的执行互斥锁只看得见自己，同一内核上两个并发堆风水必然崩溃，这不是权限问题而是内核安全问题。
+
 ## 获取内核 profile
 
 - **App 内导入（GhostLock）**：**解析完整包链接**接受完整 OTA ZIP 链接；**解析本地镜像**选择 `boot.img`，可附加 `xbl_config.img`；**导入 offsets.conf（v2）**接受 HOCON profile（旧 JSON 经 **导入 offsets.json（v1）** 转换）。

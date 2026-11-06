@@ -21,6 +21,10 @@ If Shizuku is enabled (mandatory for GhostKey), start it with ADB first and tap 
 
 Any root manager that ships `libksud.so` provides `ksud` for module loading. The built-in list (KernelSU, ReSukiSU, BakaSU, KowSU) is auto-detected, and other managers can be picked in **Settings → Root manager**. Without `ksud`, W1/W2 still grant uid 0 but no module is loaded.
 
+### Coexisting with the original GhostLock / GhostKey apps
+
+Shizuku authorization does **not** conflict: grants are per-package, each app binds its own UserService process, and the only shared component is the Shizuku server itself (one per device — restarting it affects every client app, which then simply shows `NOT_RUNNING` until restarted). **Never run exploits from two apps at the same time**: each app's execution lock only sees itself, and two concurrent heap-grooming attacks on one kernel are a guaranteed crash, not a permission question.
+
 ## Get kernel profiles
 
 - **In-app import (GhostLock)**: **Parse OTA link** accepts a full OTA ZIP URL; **Parse local image** accepts `boot.img` plus optional `xbl_config.img`; **Import offsets.conf (v2)** accepts a HOCON profile (older JSON via **Import offsets.json (v1)**).

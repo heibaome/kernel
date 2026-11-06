@@ -14,7 +14,7 @@ plugins {
 layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("app"))
 
 val appName = "GhostLock"
-val appVersionName = "2.0.1"
+val appVersionName = "2.0.2"
 
 val gitVersionCode = runCatching {
     providers.exec {
