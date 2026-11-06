@@ -899,6 +899,7 @@ private fun ControlPanel(
             profileValid = state.profileInvalidPaths.isEmpty(),
             shizukuEnabled = state.shizukuEnabled,
             shizukuStatus = state.shizukuStatus,
+            ghostKey = ghostKeyEngine,
             onParametersClick = if (ghostKeyEngine) {
                 actions::onGhostKeyImportBoot
             } else {
@@ -1153,6 +1154,7 @@ private fun ActivationStatusCard(
     profileValid: Boolean,
     shizukuEnabled: Boolean,
     shizukuStatus: ShizukuStatus,
+    ghostKey: Boolean = false,
     onParametersClick: () -> Unit,
     onShizukuClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1173,7 +1175,13 @@ private fun ActivationStatusCard(
 
         missing -> Triple(
             MiuixTheme.colorScheme.errorContainer,
-            if (!supported) R.string.kernel_unsupported else R.string.kernel_profile_required,
+            if (!supported) {
+                R.string.kernel_unsupported
+            } else if (ghostKey) {
+                R.string.gk_card_need_boot
+            } else {
+                R.string.kernel_profile_required
+            },
             Icons.Rounded.RemoveCircleOutline,
         )
 
@@ -1188,9 +1196,11 @@ private fun ActivationStatusCard(
         )
     }
     val summary = when {
+        ready && ghostKey -> R.string.gk_card_ready_summary
         ready && shizukuEnabled -> R.string.kernel_profile_ready_shizuku
         ready -> R.string.kernel_profile_ready
         !supported -> R.string.kernel_unsupported_summary
+        !profileAvailable && ghostKey -> R.string.gk_card_need_boot_summary
         !profileAvailable -> R.string.kernel_profile_required_summary
         !profileValid -> R.string.kernel_profile_invalid_summary
         shizukuStatus == ShizukuStatus.PERMISSION_REQUIRED ->
