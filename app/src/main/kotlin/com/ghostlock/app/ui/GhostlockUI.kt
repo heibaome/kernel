@@ -1012,13 +1012,32 @@ private fun ControlPanel(
     }
 }
 
-/** 调试导出卡：GL/GK 配置页共用（内核日志导出为 GL 能力；GK 运行日志另存应用私有目录）。 */
+/** 调试导出卡：GL 展示导出开关；GK 无公共存储导出能力（运行日志在私有 run_logs/），展示说明卡。 */
 @Composable
 internal fun DebugExportCard(
     state: GhostlockUiState,
     actions: GhostlockActions,
+    ghostKey: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    if (ghostKey) {
+        Card(modifier = modifier) {
+            Column {
+                Text(
+                    text = stringResource(R.string.gk_debug_card_title),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    style = MiuixTheme.textStyles.footnote1,
+                )
+                Text(
+                    text = stringResource(R.string.gk_debug_card_body),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
+        return
+    }
     Card(modifier = modifier) {
         Column {
             SwitchPreference(
@@ -1271,7 +1290,7 @@ internal fun GhostKeyConfigScreen(
                 )
             }
             item(key = "debug") {
-                DebugExportCard(state = state, actions = actions, modifier = Modifier.fillMaxWidth())
+                DebugExportCard(state = state, actions = actions, ghostKey = true, modifier = Modifier.fillMaxWidth())
             }
             item(key = "about") {
                 AboutEntryCard(actions = actions, modifier = Modifier.fillMaxWidth())
