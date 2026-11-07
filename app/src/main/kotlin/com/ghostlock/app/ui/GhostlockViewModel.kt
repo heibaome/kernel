@@ -1235,6 +1235,7 @@ class GhostlockViewModel(
                 val code = ghostKeyBridge.run(
                     releaseOverride = state.value.ghostKeySelectedRelease,
                     deviceModel = snapshot.deviceName,
+                    managerPackage = state.value.selectedManagerPackage,
                     appendLog = ::appendLog,
                 )
                 appendLog(if (code == 0) "result: exploit completed" else "result: exploit failed (exit code=$code)")

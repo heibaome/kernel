@@ -109,6 +109,7 @@ class GhostKeyEngineBridge(context: Context) {
     suspend fun run(
         releaseOverride: String?,
         deviceModel: String,
+        managerPackage: String? = null,
         appendLog: (String) -> Unit,
     ): Int {
         val runCounter = runLogStore.nextRunId()
@@ -134,6 +135,7 @@ class GhostKeyEngineBridge(context: Context) {
                     )
                 },
                 releaseOverride = releaseOverride,
+                managerPackage = managerPackage,
             )
             return exit
         } finally {

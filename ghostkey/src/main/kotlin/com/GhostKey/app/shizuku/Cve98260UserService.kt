@@ -85,7 +85,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
         private fun stageIndex(stage: String): Int = NativeContract.Stage.indexOf(stage)
     }
 
-    override fun executeExploit(profileBlob: ByteArray?, callback: ICve98260Callback?) {
+    override fun executeExploit(profileBlob: ByteArray?, managerPackage: String?, callback: ICve98260Callback?) {
         if (!running.compareAndSet(false, true)) {
             callback?.onLog("<s> error: another exploit process is already running")
             callback?.onComplete(1)
@@ -94,7 +94,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
 
         Thread({
             val code = try {
-                runChain(profileBlob, callback)
+                runChain(profileBlob, managerPackage, callback)
             } catch (e: Exception) {
                 Log.e(TAG, "execution failed", e)
                 runCatching { callback?.onLog("<s> error: ${e.message}") }
@@ -106,7 +106,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
     }
 
 
-    private fun runChain(profileBlob: ByteArray?, callback: ICve98260Callback?): Int {
+    private fun runChain(profileBlob: ByteArray?, managerPackage: String?, callback: ICve98260Callback?): Int {
         val gate = PrivilegeGate.checkService()
         require(gate.ok) { "not shell/root uid (${gate.uid})" }
         val self = File("/proc/self/status").readText()
@@ -129,7 +129,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
         File(workDir, RESULT_PAGE_OFFSET).delete()
         File(workDir, RESULT_PAGE_OFFSET_SCORE).delete()
 
-        val ksud = resolveKsud(workDir, callback)
+        val ksud = resolveKsud(workDir, callback, managerPackage)
         if (ksud != null) callback?.onLog("<s> ksud: ${ksud.absolutePath}")
         else callback?.onLog("<s> warn: ksud not available, KSU takeover will be skipped")
 
@@ -993,7 +993,34 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
      * 任意外部来源 ksud 经 CVE98260_KSUD 传给原生 find_ksud（第一优先候选）。
      * 不动原生 C：ksu.c 大小校验只打日志、不拦截。
      */
-    private fun resolveKsud(workDir: File, callback: ICve98260Callback?): File? {
+    private fun resolveKsud(workDir: File, callback: ICve98260Callback?, preferredPackage: String?): File? {
+        /* 首页选择的根管理器优先（与 GL 的 resolveKsudPath 语义一致）：
+         * 用户指定的包若带 libksud.so，直接取它，保证模块加载落在所选管理器；
+         * 未选择/不可用时回落到既有扫描链（内置表 → 全量扫描）。 */
+        if (!preferredPackage.isNullOrBlank()) {
+            val preferred = runCatching {
+                val info = context.packageManager.getApplicationInfo(preferredPackage, 0)
+                File(info.nativeLibraryDir, KsudStage.LIB_NAME)
+            }.getOrNull()
+            if (preferred != null && preferred.isFile && preferred.length() > 0L) {
+                val staged = runCatching {
+                    val target = File(KsudStage.TARGET)
+                    preferred.copyTo(target, overwrite = true)
+                    target.setExecutable(true, false)
+                    target
+                }.getOrNull()
+                if (staged != null && staged.length() > 0L) {
+                    callback?.onLog(
+                        "<s> ksud staged from selected manager [$preferredPackage]: " +
+                            "${staged.absolutePath} (size=${staged.length()})",
+                    )
+                    return staged
+                }
+                callback?.onLog("<s> warn: selected manager lib found but staging failed; falling back to scan")
+            } else {
+                callback?.onLog("<s> warn: selected manager [$preferredPackage] has no libksud.so; falling back to scan")
+            }
+        }
         val scanned = runCatching { KsudStage.scanManagerLib(context.packageManager) }.getOrNull()
         if (scanned != null) {
             val (lib, pkg) = scanned
