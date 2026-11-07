@@ -57,6 +57,9 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
          * the native process via GHOSTLOCK_KSU_LOG. */
         fun ksuLogName(runStamp: Long) = "ghostlock-ksu-$runStamp.log"
 
+        /** filesDir 里保留的最近 ksu 运行日志数（超出删最旧）。 */
+        const val KSU_LOG_KEEP = 10
+
         /* Every run's stdout/stderr is redirected here (export or not), so the
          * previous run can be inspected on the next start-up. */
         const val NativeLogFileName = ".ghostlock_native.log"
@@ -603,6 +606,13 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
             // U01-S14: a per-run KernelSU log path so a previous run's markers
             // can never satisfy the handoff probe; passed to the native process.
             val ksuLog = File(workDir, ksuLogName(System.currentTimeMillis()))
+            /* 每次运行一个 ksu 日志文件；只保留最近 KSU_LOG_KEEP 个，防止 filesDir 无界堆积。 */
+            runCatching {
+                filesDir.listFiles { f -> f.isFile && f.name.startsWith("ghostlock-ksu-") }
+                    ?.sortedBy { it.lastModified() }
+                    ?.dropLast(KSU_LOG_KEEP)
+                    ?.forEach { f -> runCatching { f.delete() } }
+            }
             val nativeLog = File(workDir, NativeLogFileName)
             nativeLog.writeText("")
             val release = System.getProperty("os.version", "").orEmpty()
