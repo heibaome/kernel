@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +70,8 @@ import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.ExecutionFieldValue
 import com.ghostlock.app.domain.model.ProfileFieldNode
 import com.ghostlock.app.domain.model.ShizukuStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.ghostlock.app.domain.model.UserProfileFile
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -627,6 +631,9 @@ private fun GhostlockManagerPickerSheet(
     )
 }
 
+/** 管理器选择器图标缓存（进程级，包名为键，上限 256 个）。 */
+private val managerIconCache = android.util.LruCache<String, ImageBitmap>(256)
+
 @Composable
 private fun ManagerPickerRow(
     title: String,
@@ -638,18 +645,22 @@ private fun ManagerPickerRow(
 ) {
     val context = LocalContext.current
     val pm = context.packageManager
-    val imageBitmap = remember(icon) {
-        icon?.let { candidate ->
-            runCatching {
-                val drawable = pm.getApplicationIcon(candidate.packageName)
-                val width = maxOf(drawable.intrinsicWidth, 1)
-                val height = maxOf(drawable.intrinsicHeight, 1)
-                android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
-                    drawable.setBounds(0, 0, width, height)
-                    drawable.draw(android.graphics.Canvas(bitmap))
-                }
-            }.getOrNull()
-        }?.asImageBitmap()
+    /* 图标异步加载 + 进程级缓存 + 固定降采样：同步在主线程做
+     * PackageManager IPC + 大尺寸位图绘制是"显示全部应用"滚动卡顿的根源。 */
+    val iconKey = icon?.packageName
+    val imageBitmap by produceState<ImageBitmap?>(iconKey?.let(managerIconCache::get), iconKey) {
+        if (value == null && iconKey != null) {
+            value = withContext(Dispatchers.IO) {
+                runCatching {
+                    val drawable = pm.getApplicationIcon(iconKey)
+                    val size = 96
+                    android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
+                        drawable.setBounds(0, 0, size, size)
+                        drawable.draw(android.graphics.Canvas(bitmap))
+                    }
+                }.getOrNull()?.asImageBitmap()?.also { managerIconCache.put(iconKey, it) }
+            }
+        }
     }
     Row(
         modifier = Modifier
@@ -664,7 +675,7 @@ private fun ManagerPickerRow(
     ) {
         if (imageBitmap != null) {
             Image(
-                bitmap = imageBitmap,
+                bitmap = imageBitmap!!,
                 contentDescription = null,
                 modifier = Modifier
                     .size(40.dp)
