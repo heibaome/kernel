@@ -1338,9 +1338,10 @@ private fun ActivationStatusCard(
 
         missing -> Triple(
             when {
-                MiuixTheme.isDynamicColor -> Color(0xFF3B201D)
-                isSystemInDarkTheme() -> Color(0xFF3B201D)
-                else -> Color(0xFFFCE9E7)
+                /* 与"未授权 Shizuku"警告卡同色：GK 未获取 profile 属可操作的警告态。 */
+                MiuixTheme.isDynamicColor -> MiuixTheme.colorScheme.tertiaryContainer
+                isSystemInDarkTheme() -> Color(0xFF3E2F1B)
+                else -> Color(0xFFFFF0DB)
             },
             if (!supported) {
                 R.string.kernel_unsupported
@@ -1354,8 +1355,8 @@ private fun ActivationStatusCard(
 
         else -> Triple(
             when {
-                MiuixTheme.isDynamicColor -> Color(0xFF382B14)
-                isSystemInDarkTheme() -> Color(0xFF382B14)
+                MiuixTheme.isDynamicColor -> MiuixTheme.colorScheme.tertiaryContainer
+                isSystemInDarkTheme() -> Color(0xFF3E2F1B)
                 else -> Color(0xFFFFF0DB)
             },
             if (!profileValid) R.string.kernel_profile_invalid else R.string.shizuku_label,
