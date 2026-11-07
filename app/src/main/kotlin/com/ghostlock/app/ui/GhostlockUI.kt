@@ -1337,7 +1337,11 @@ private fun ActivationStatusCard(
         )
 
         missing -> Triple(
-            MiuixTheme.colorScheme.errorContainer,
+            when {
+                MiuixTheme.isDynamicColor -> Color(0xFF3B201D)
+                isSystemInDarkTheme() -> Color(0xFF3B201D)
+                else -> Color(0xFFFCE9E7)
+            },
             if (!supported) {
                 R.string.kernel_unsupported
             } else if (ghostKey) {
@@ -1350,8 +1354,8 @@ private fun ActivationStatusCard(
 
         else -> Triple(
             when {
-                MiuixTheme.isDynamicColor -> MiuixTheme.colorScheme.tertiaryContainer
-                isSystemInDarkTheme() -> Color(0xFF3E2F1B)
+                MiuixTheme.isDynamicColor -> Color(0xFF382B14)
+                isSystemInDarkTheme() -> Color(0xFF382B14)
                 else -> Color(0xFFFFF0DB)
             },
             if (!profileValid) R.string.kernel_profile_invalid else R.string.shizuku_label,
@@ -1394,10 +1398,8 @@ private fun ActivationStatusCard(
                 tint = if (MiuixTheme.isDynamicColor) {
                     when (icon) {
                         Icons.Rounded.CheckCircleOutline -> MiuixTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        Icons.Rounded.RemoveCircleOutline ->
-                            MiuixTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-
-                        else -> MiuixTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        Icons.Rounded.RemoveCircleOutline -> Color(0xFFF5A623)
+                        else -> Color(0xFFF72727)
                     }
                 } else {
                     when (icon) {
