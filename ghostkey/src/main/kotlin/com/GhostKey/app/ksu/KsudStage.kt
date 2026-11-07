@@ -31,8 +31,8 @@ object KsudStage {
         "com.kowx712.supermanager",
     )
 
-    /** 管理器 APK 内 ksud 的伪装文件名。 */
-    private const val LIB_NAME = "libksud.so"
+    /** 管理器 APK 内 ksud 的伪装文件名（shell 侧按指定管理器直取与扫描链共用）。 */
+    const val LIB_NAME = "libksud.so"
 
     /**
      * 【主路径】PackageManager 扫描已装应用找 libksud.so（v1.0.9 起）。
