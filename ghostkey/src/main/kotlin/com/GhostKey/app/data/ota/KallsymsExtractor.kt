@@ -87,6 +87,40 @@ internal object KallsymsExtractor {
         return r
     }
 
+    private fun i32(d: ByteArray, o: Int): Long =
+        u32(d, o).let { if (it >= 0x80000000L) it - 0x100000000L else it }
+
+    /**
+     * 按内核 `kallsyms_sym_address()` 语义把偏移表解码为绝对地址（移植自
+     * PC 端 tools/extract_rs/src/kallsyms_finder.rs 的 decode_addresses）：
+     *  - 负偏移占比过半 → ABSOLUTE_PERCPU 编码：负值 = base - 1 - offset
+     *    （普通符号），正值 = 绝对地址（percpu 段，低地址）；
+     *  - 否则 = BASE_RELATIVE 无符号：address = base + u32(offset)。
+     * 地址表必须非降（kallsyms 按地址排序）；不满足返回 null（候选无效）。
+     */
+    internal fun decodeAddresses(d: ByteArray, off: Int, numSyms: Int, base: Long): LongArray? {
+        if (off < 0 || off.toLong() + 4L * numSyms > d.size) return null
+        var negatives = 0
+        for (i in 0 until numSyms) {
+            if (i32(d, off + 4 * i) < 0) negatives++
+        }
+        val signedMode = negatives * 2 >= numSyms
+        val addresses = LongArray(numSyms)
+        var prev = Long.MIN_VALUE
+        for (i in 0 until numSyms) {
+            val v = i32(d, off + 4 * i)
+            val a: Long = if (signedMode) {
+                if (v < 0) base - 1 - v else v
+            } else {
+                base + (v and 0xFFFFFFFFL)
+            }
+            if (a < prev) return null
+            prev = a
+            addresses[i] = a
+        }
+        return addresses
+    }
+
     private fun ByteArray.indexOfByte(b: Byte, from: Int, limit: Int = size): Int {
         var i = from.coerceAtLeast(0)
         val end = minOf(limit, size)
@@ -193,6 +227,7 @@ internal object KallsymsExtractor {
     ): Result? {
         if (!isKernelAddr(base)) return null
         if (offsetsOff < 0 || offsetsOff.toLong() + 4L * numSyms > data.size) return null
+        val addresses = decodeAddresses(data, offsetsOff, numSyms, base) ?: return null
         val symbols = HashMap<String, Long>(numSyms * 2)
         val ambiguous = HashSet<String>()
         var p = namesStart
@@ -211,7 +246,7 @@ internal object KallsymsExtractor {
             val raw = decode(tokens, data, p, len)
             p += len
             val name = if (raw.length <= 1) raw else raw.substring(1)
-            val address = base + u32(data, offsetsOff + 4 * i)
+            val address = addresses[i]
             val prev = symbols[name]
             if (prev != null && prev != address) {
                 ambiguous.add(name)
@@ -499,7 +534,11 @@ internal object KallsymsExtractor {
 
         fun add(off: Int, base: Long) {
             if (!isKernelAddr(base)) return
-            if (!ascendingAt(d, off, numSyms)) return
+            /* 无符号相对表走 ascendingAt 快筛；有符号（ABSOLUTE_PERCPU）表
+             * u32 视角不递增，改用 decodeAddresses 完整校验（含早退）。 */
+            if (!ascendingAt(d, off, numSyms) &&
+                decodeAddresses(d, off, numSyms, base) == null
+            ) return
             if (!seen.add(off)) return
             out.add(off to base)
         }
