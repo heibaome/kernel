@@ -138,6 +138,10 @@ jobs:
       - name: Ghostkey unit tests
         run: ./gradlew :ghostkey:test --no-daemon
 
+      # app 模块 JVM 单测（GhostKey 日志染色等纯逻辑），与 native 无关，不需要 NDK
+      - name: App unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
       - name: Strip Ghostlock binary
         run: |
           "${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all build/native/ghostlock || true

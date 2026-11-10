@@ -2124,8 +2124,13 @@ static void read_enforce(void)
 		dprintf(STDOUT_FILENO, "[SELinux] enforce read errno=%d\n", errno);
 		return;
 	}
-	if (read(fd, buf, sizeof(buf) - 1) > 0)
-		dprintf(STDOUT_FILENO, "[SELinux] enforce=%s", buf);
+	/* 输出必须以 \n 收尾：本函数的输出与后续打印共写同一条 stdout 流，
+	 * 缺换行会把下一条日志（甚至 C98260_STATUS 控制行）粘进本行，
+	 * Kotlin 侧 relayLog 按行切分后就会丢事件。 */
+	if (read(fd, buf, sizeof(buf) - 1) > 0) {
+		buf[strcspn(buf, "\r\n")] = '\0';
+		dprintf(STDOUT_FILENO, "[SELinux] enforce=%s\n", buf);
+	}
 	close(fd);
 }
 

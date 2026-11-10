@@ -1092,8 +1092,12 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
 
 
     /**
-     * 日志文件 tailer：把原生 stdout 逐行回传，状态行转 onProgress。
+     * 日志文件 tailer：把原生 stdout 逐行回传。
      * 按字节缓冲 + 整行 UTF-8 解码（原生日志含中文，逐字节转 Char 会乱码）。
+     *
+     * native 的 C98260_STATUS 控制行**不再转成 onProgress**：runChain 在每个
+     * native emit 点都有显式的 onProgress（还多覆盖 verify 阶段），双源转发会让
+     * UI 与落盘日志里 "[*] stage …" 行成对重复。控制行在这里直接丢弃。
      */
     private fun relayLog(logFile: File, callback: ICve98260Callback?) {
         var offset = 0L
@@ -1102,13 +1106,8 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
 
         fun emitLine(raw: ByteArray) {
             val line = String(raw, Charsets.UTF_8)
-            if (line.isEmpty()) return
-            if (line.startsWith(STATUS_MARKER)) {
-                val parts = line.removePrefix(STATUS_MARKER).trim().split(' ')
-                if (parts.size >= 2) callback?.onProgress(stageIndex(parts[0]), parts[1])
-            } else {
-                callback?.onLog(line)
-            }
+            if (line.isEmpty() || line.startsWith(STATUS_MARKER)) return
+            callback?.onLog(line)
         }
 
         while (!Thread.currentThread().isInterrupted) {
