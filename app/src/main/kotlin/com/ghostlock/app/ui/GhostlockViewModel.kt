@@ -1307,7 +1307,7 @@ class GhostlockViewModel(
                     }
                     null -> {
                         appendLog("<-> import failed: cannot read image")
-                        showNotice(R.string.import_result_title, R.string.import_failed)
+                        showNotice(R.string.import_result_title, R.string.gk_import_read_err)
                     }
                 }
                 refreshGhostKeyStatus()
@@ -1333,24 +1333,39 @@ class GhostlockViewModel(
                         appendLog("<k> GhostKey profile imported from conf: ${outcome.release}")
                         if (!outcome.complete) {
                             appendLog("<-> missing fields: ${outcome.missing.joinToString()}")
-                            showNotice(R.string.import_result_title, R.string.import_no_match)
+                            showNotice(
+                                R.string.import_result_title,
+                                R.string.gk_import_ok_missing,
+                                messageArgs = listOf(
+                                    outcome.release,
+                                    outcome.missing.joinToString(),
+                                ),
+                            )
                         } else {
                             showNotice(R.string.import_result_title, R.string.import_success)
                         }
                     }
                     is com.GhostKey.app.data.ImportOutcome.Err -> {
                         appendLog("<-> import failed: ${outcome.message}")
-                        showNotice(R.string.import_result_title, R.string.import_failed)
+                        showNotice(
+                            R.string.import_result_title,
+                            R.string.gk_import_conf_err,
+                            messageArgs = listOf(outcome.message),
+                        )
                     }
                     null -> {
                         appendLog("<-> import failed: cannot read document")
-                        showNotice(R.string.import_result_title, R.string.import_failed)
+                        showNotice(R.string.import_result_title, R.string.gk_import_read_err)
                     }
                 }
                 refreshGhostKeyStatus()
             } catch (e: Exception) {
                 appendLog("<-> import failed: ${e.message}")
-                showNotice(R.string.import_result_title, R.string.import_failed)
+                showNotice(
+                    R.string.import_result_title,
+                    R.string.gk_import_conf_err,
+                    messageArgs = listOf(e.message ?: "unknown error"),
+                )
             }
         }
     }

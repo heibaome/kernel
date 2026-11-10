@@ -22,6 +22,8 @@
     <string name="gk_import_ok">GhostKey profile generated for %1$s</string>
     <string name="gk_import_ok_missing">GhostKey profile generated for %1$s, but fields are missing: %2$s. It cannot be used until the image provides them.</string>
     <string name="gk_import_err">Could not import the boot image: %1$s</string>
+    <string name="gk_import_conf_err">Could not import the profile file: %1$s</string>
+    <string name="gk_import_read_err">Could not read the selected file (SAF read failed or the file is empty)</string>
     <string name="gk_card_need_boot">No GhostKey profile yet</string>
     <string name="gk_card_need_boot_summary">Tap to import boot.img and build the profile on device; once extraction succeeds you can run the exploit</string>
     <string name="gk_card_ready_summary">Boot image parsed successfully — you can run the exploit</string>

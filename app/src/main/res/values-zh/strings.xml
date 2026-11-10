@@ -22,6 +22,8 @@
     <string name="gk_import_ok">已为 %1$s 生成 GhostKey profile</string>
     <string name="gk_import_ok_missing">已为 %1$s 生成 GhostKey profile，但缺少字段：%2$s。补全前无法使用。</string>
     <string name="gk_import_err">boot 镜像导入失败：%1$s</string>
+    <string name="gk_import_conf_err">配置文件导入失败：%1$s</string>
+    <string name="gk_import_read_err">无法读取所选文件（SAF 读取失败或文件为空）</string>
     <string name="gk_card_need_boot">尚未获取 GhostKey profile</string>
     <string name="gk_card_need_boot_summary">点按导入 boot.img，在本机解析生成 profile；解析成功后即可执行提权</string>
     <string name="gk_card_ready_summary">boot 镜像解析成功，可直接执行提权</string>

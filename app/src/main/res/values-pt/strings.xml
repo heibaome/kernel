@@ -135,6 +135,8 @@
     <string name="gk_import_ok">Perfil do GhostKey gerado para %1$s</string>
     <string name="gk_import_ok_missing">Perfil do GhostKey gerado para %1$s, mas faltam campos: %2$s. Ele não pode ser usado até que a imagem os forneça.</string>
     <string name="gk_import_err">Não foi possível importar a imagem de boot: %1$s</string>
+    <string name="gk_import_conf_err">Não foi possível importar o arquivo de perfil: %1$s</string>
+    <string name="gk_import_read_err">Não foi possível ler o arquivo selecionado (falha de leitura SAF ou arquivo vazio)</string>
     <string name="gk_card_need_boot">Ainda sem perfil do GhostKey</string>
     <string name="gk_card_need_boot_summary">Toque para importar o boot.img e gerar o perfil no próprio aparelho; assim que a extração for concluída você poderá executar a elevação</string>
     <string name="gk_card_ready_summary">Imagem de boot analisada com sucesso — pronto para executar a elevação</string>
