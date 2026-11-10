@@ -1198,7 +1198,7 @@ internal fun DebugExportCard(
                 )
                 ArrowPreference(
                     title = stringResource(R.string.gk_run_history_entry),
-                    onClick = actions.onOpenRunLogSheet,
+                    onClick = actions::onOpenRunLogSheet,
                 )
             }
         }
