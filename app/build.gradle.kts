@@ -14,7 +14,7 @@ plugins {
 layout.buildDirectory.set(rootProject.layout.buildDirectory.dir("app"))
 
 val appName = "GhostSuite"
-val appVersionName = "2.0.17"
+val appVersionName = "2.0.18"
 
 val gitVersionCode = runCatching {
     providers.exec {

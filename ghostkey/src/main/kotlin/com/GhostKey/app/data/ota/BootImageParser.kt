@@ -119,6 +119,31 @@ class BootImageParser {
 
     class ImgExtractError(message: String) : RuntimeException(message)
 
+    /** Android boot v3/v4 头解析结果（供大文件流式读取 kernel 段使用）。 */
+    data class AndroidBootHeader(
+        val version: Int,
+        /** kernel 段在文件中的起始偏移（页对齐）。 */
+        val kernelOffset: Int,
+        /** kernel 段字节数。 */
+        val kernelSize: Int,
+    )
+
+    /**
+     * 仅解析 Android boot v3/v4 头（输入为文件开头 ≥44 字节）。
+     * 非 Android boot 格式（raw arm64 Image / gzip）返回 null，
+     * 由调用方走全量读取。与 [decodeKernelImage] 的头部判定保持一致。
+     */
+    fun parseAndroidBootHeader(header: ByteArray): AndroidBootHeader? {
+        if (header.size < 44 || !header.contentEqualsPrefix(ANDROID_MAGIC, 0)) return null
+        val kernelSize = u32(header, 8)
+        val headerSize = u32(header, 20)
+        val version = u32(header, 40)
+        if (version != 3 && version != 4) return null
+        val kernelOffset = align(headerSize, PAGE_SIZE)
+        if (kernelSize <= 0 || kernelOffset <= 0) return null
+        return AndroidBootHeader(version, kernelOffset, kernelSize)
+    }
+
 
     private val ANDROID_MAGIC = byteArrayOf(0x41, 0x4E, 0x44, 0x52, 0x4F, 0x49, 0x44, 0x21) // "ANDROID!"
     private val LZ4_LEGACY_MAGIC = byteArrayOf(0x02, 0x21, 0x4C, 0x18)

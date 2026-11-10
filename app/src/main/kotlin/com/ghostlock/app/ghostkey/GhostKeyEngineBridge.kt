@@ -6,12 +6,15 @@ import com.GhostKey.app.data.ImportOutcome
 import com.GhostKey.app.data.RunLogStore
 import com.GhostKey.app.data.RunResult
 import com.GhostKey.app.data.StoredProfile
+import com.GhostKey.app.data.ota.BootImageParser
 import com.GhostKey.app.device.DeviceBinding
 import com.GhostKey.app.engine.ExploitEngine
 import com.GhostKey.app.model.ShizukuStatus as GhostKeyShizukuStatus
 import com.GhostKey.app.native.NativeContract
 import com.GhostKey.app.shizuku.ShizukuPermissionManager
 import com.ghostlock.app.domain.model.ShizukuStatus
+
+import java.io.InputStream
 
 /**
  * GhostKey (CVE-2026-98260) 引擎桥接层。
@@ -91,18 +94,69 @@ class GhostKeyEngineBridge(context: Context) {
         engine.profiles.importer.importProfile(displayName, text)
 
     /**
-     * 从 SAF Uri 读字节后导入 boot.img。文件流读取失败时不再返回 null，
-     * 而是返回携带底层异常的 Err——读取失败与解析失败必须能在结果弹窗里区分开。
+     * 从 SAF Uri 读字节后导入 boot.img。
+     *
+     * Android boot v3/v4 只读 kernel 段（页对齐偏移起、kernelSize 字节），
+     * 不把 ramdisk/dtb 读进内存——完整 boot.img 动辄数百 MB，整文件
+     * readBytes 会直接 OOM；raw arm64 Image / gzip 才走全量（此类文件
+     * 不含 ramdisk，本身不大）。文件流读取失败时返回携带底层异常的
+     * Err，让结果弹窗能区分「读取失败」与「解析失败」。
      */
     fun importImgFromUri(uri: Uri, displayName: String): ImportOutcome? {
         val bytes = try {
-            appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            readImageForParse(uri)
         } catch (e: OutOfMemoryError) {
             return ImportOutcome.Err("无法读取所选文件（内存不足，文件可能过大）")
         } catch (e: Exception) {
             return ImportOutcome.Err("无法读取所选文件（${e.javaClass.simpleName}）: ${e.message}")
         } ?: return ImportOutcome.Err("无法读取所选文件（内容提供者未返回数据流）")
         return importImg(displayName, bytes)
+    }
+
+    /** 按需读取：boot v3/v4 只取 kernel 段，其余格式全量读取。 */
+    private fun readImageForParse(uri: Uri): ByteArray? {
+        val resolver = appContext.contentResolver
+        val prefix = resolver.openInputStream(uri)?.use { readUpTo(it, 8 * 1024) } ?: return null
+        val header = BootImageParser().parseAndroidBootHeader(prefix)
+            ?: return resolver.openInputStream(uri)?.use { it.readBytes() }
+        return resolver.openInputStream(uri)?.use { input ->
+            skipFully(input, header.kernelOffset)
+            val out = ByteArray(header.kernelSize)
+            var off = 0
+            while (off < header.kernelSize) {
+                val r = input.read(out, off, header.kernelSize - off)
+                if (r < 0) {
+                    throw IllegalStateException(
+                        "boot.img kernel 段被截断（offset=${header.kernelOffset}, size=${header.kernelSize}）",
+                    )
+                }
+                off += r
+            }
+            out
+        }
+    }
+
+    private fun readUpTo(input: InputStream, max: Int): ByteArray {
+        val buf = ByteArray(max)
+        var off = 0
+        while (off < max) {
+            val r = input.read(buf, off, max - off)
+            if (r < 0) break
+            off += r
+        }
+        return if (off == max) buf else buf.copyOf(off)
+    }
+
+    private fun skipFully(input: InputStream, count: Int) {
+        var remaining = count.toLong()
+        val buf = ByteArray(64 * 1024)
+        while (remaining > 0) {
+            val r = input.read(buf, 0, minOf(remaining, buf.size.toLong()).toInt())
+            if (r < 0) {
+                throw IllegalStateException("boot.img 在 kernel 段之前被截断（需跳过 $count 字节）")
+            }
+            remaining -= r
+        }
     }
 
     // ---- 执行 ----
