@@ -134,8 +134,9 @@ jobs:
           ./gradlew :app:assembleRelease --no-daemon
 
       # ghostkey 模块纯逻辑单测（kallsyms 恢复移植、decodeAddresses 等），必须在 CI 跑
+      # （AGP 9 合并变体任务，library 只暴露聚合的 test，无 testDebugUnitTest/testReleaseUnitTest）
       - name: Ghostkey unit tests
-        run: ./gradlew :ghostkey:testReleaseUnitTest --no-daemon
+        run: ./gradlew :ghostkey:test --no-daemon
 
       - name: Strip Ghostlock binary
         run: |
