@@ -74,6 +74,10 @@ Import `profile.conf` in the app. Omit `--xbl-config` if you do not have that im
 - [Add a component](docs/development/adding-a-component.md), [engineering rules](docs/development/engineering-standards.md), and [writing rules](docs/development/documentation-standards.md)
 - [Code audit (2026-11)](docs/audit/code-audit-2026-11.md) — Android data/UI findings and their fixes
 
+## Disclaimer
+
+This tool performs kernel privilege escalation against known vulnerabilities, for security research and authorized modification of devices you own. Profiles are device- and kernel-specific: applying a mismatched profile can panic the kernel or corrupt memory. Profiles generated on-device from a `boot.img` or imported `.conf` files are **not** verified on real hardware unless explicitly marked supported — use at your own risk. Test fixtures in this repository are synthetic and encode no real device data. The authors are not responsible for bricked devices, data loss, or misuse.
+
 ## Credits and license
 
 Licensed under [Apache License 2.0](LICENSE). Based on:

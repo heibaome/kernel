@@ -74,6 +74,10 @@ build/extract/release/ghostlock-extract OTA.zip --format conf --out profile.conf
 - [新增组件](docs/development/adding-a-component_ZH.md)、[工程规范](docs/development/engineering-standards_ZH.md)和[文档规范](docs/development/documentation-standards_ZH.md)
 - [代码审计记录（2026-11）](docs/audit/code-audit-2026-11_ZH.md)——Android 数据层/UI 层发现与修复
 
+## 免责声明
+
+本工具针对已知漏洞进行内核提权，仅供安全研究与对你拥有所有权的设备做授权修改。Profile 与设备/内核版本一一对应：套错偏移可能导致内核 panic 或内存损坏。由 `boot.img` 本机生成或经 `.conf` 导入的 profile，除非明确标记为 supported，**均未经过真机验证**，使用风险自负。仓库中的测试夹具均为合成数据，不包含任何真实设备信息。作者不对设备变砖、数据丢失或滥用承担责任。
+
 ## 来源与许可证
 
 采用 [Apache License 2.0](LICENSE)，基于以下项目：
