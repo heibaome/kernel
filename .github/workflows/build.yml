@@ -133,6 +133,10 @@ jobs:
           export KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
           ./gradlew :app:assembleRelease --no-daemon
 
+      # ghostkey 模块纯逻辑单测（kallsyms 恢复移植、decodeAddresses 等），必须在 CI 跑
+      - name: Ghostkey unit tests
+        run: ./gradlew :ghostkey:testReleaseUnitTest --no-daemon
+
       - name: Strip Ghostlock binary
         run: |
           "${{ runner.temp }}/ondk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-all build/native/ghostlock || true

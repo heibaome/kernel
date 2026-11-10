@@ -1,41 +1,30 @@
 package com.GhostKey.app.data.ota
 
 /**
- * 纯 Kotlin kallsyms 符号表提取器。
+ * 纯 Kotlin kallsyms 符号表恢复器。
  *
- * 定位策略是「自洽闭合链」：每找到一个锚点就顺着结构关系推下一个，
- * 每一步都用可用来自证的不变式校验，任一步对不上就丢弃该候选。
+ * 完整移植 PC 端 tools/extract_rs/src/kallsyms_finder.rs 的 recover 流程
+ * （该算法已在 OnePlus Ace5 6.1.157 等真机镜像上验证），取代旧的
+ * 「token_index 反推 + 双向夹逼」启发式 —— 旧链在 num_syms 后带 4 字节
+ * 填充、token_table 与 token_index 间距超出小窗口的 6.1 GKI 布局上会整体
+ * 断裂。流程：
  *
- * ```
- * kallsyms_token_index (256 个严格递增 u16, 首项 0)
- *   → kallsyms_token_table  (256 个 NUL 结尾串，累计偏移与 u16 逐一相等)
- *   → kallsyms_markers      (首项 0、严格递增；与 token_table 之间可能夹 seqs_of_names)
- *   → kallsyms_names 起点   (256 条记录推进量 == markers[1])
- *   → kallsyms_num_syms     (names 之前 u32，且 ceil(num/256) 与 markers 项数吻合)
- *   → kallsyms_offsets      (三种实测布局 + 对齐填充容错)
- *   → kallsyms_relative_base(u64 高 24 位全 1)
- * ```
- *
- * ---
- * 本轮新增/修正的关键点（都是实测踩出来的）：
- *
- * 1. **双字节长度转义**：`kallsyms_names` 记录首字节最高位为 1 时长度占两字节
- *    `len = (b0 & 0x7f) | (b1 << 7)`（内核 `kallsyms_expand_symbol()`）。
- *    按单字节解析会让长符号名多吞字节，names/markers 全线错位。
- *
- * 2. **markers 必须按 num_syms 截断**：toward token_table 方向多读一个 u32 很容易
- *    把后面 seqs 的字节误当成 markers 的尾巴（实测多出 1 项），
- *    必须截到 `ceil(num_syms/256)` 再校验。
- *
- * 3. **段间存在对齐填充**：markers→token_table、offsets→base、base→num_syms
- *    之间都可能有 0~12 字节填充，任何「严格相邻」的假设都会漏。
- *
- * 4. **三种 offsets 布局**：
- *    (a) 经典 `[base][offsets][num_syms][names]...`
- *    (b) `[offsets][base][num_syms][names]...`
- *    (c) 实测 6.12 GKI `[names][markers][token_table][token_index][offsets][base]`
- *
- * 5. **符号名必须剥掉首位类型字符**（t/T/d/D/b/B/r/R/a/A），否则查不到目标符号。
+ *  1. [findTokenTables]：搜 "0\0..9\0" 数字 needle，枚举 8 对齐表起点，
+ *     以「256 个 NUL 结尾可打印串 + u16 索引数组逐一相等」验证；
+ *  2. [findNameTables]：在 token 表前 4MB 内 8 对齐扫描 markers（首项 0、
+ *     相邻差 0x200..0x40000），再按 markers 尾值估计 names 尾部、向下回溯
+ *     num_syms（u32 计数落在 markers 项数界内 + 4 字节零填充）；
+ *  3. [parseNameSpans]：按记录走查 names（支持 uleb128 双字节长度转义），
+ *     每 256 条必须命中对应 marker，末尾对齐到 markers 且填充为零；
+ *  4. [decodeNames]：token 展开，要求类型字符合法、名字可打印，且必含
+ *     _text / _end / load_module；
+ *  5. [decodeAddressesFull]：pre-6.4（offsets 紧贴 relative_base 之前）与
+ *     6.4+（offsets 在 token_index 之后）两种布局都试，要求地址表非降、
+ *     恰有一个 _text==relative_base、_end-_text==image_size、≥90% 普通
+ *     符号落在 [_text,_end] 内；
+ *  6. 多候选仲裁：可选 BTF blob 边界（__start_BTF/__stop_BTF 反推出的
+ *     偏移/长度与实际 BTF 位置一致者胜）；无 BTF 时唯一候选直接采用，
+ *     多候选报歧义。
  */
 internal object KallsymsExtractor {
 
@@ -49,50 +38,52 @@ internal object KallsymsExtractor {
         val numSyms: Int,
     )
 
-    /** 判定「解析成功」的依据：这 7 个符号必须能查到。 */
-    private val TARGETS = arrayOf(
-        "do_timer_create", "prepare_creds", "selinux_state",
-        "init_user_ns", "root_user", "init_groups", "init_ucounts",
-    )
+    /** kallsyms 必含的锚符号（PC 端 REQUIRED_SYMBOLS）。 */
+    private val REQUIRED_SYMBOLS = arrayOf("_text", "_end", "load_module")
 
-    /** kallsyms 偏移值上限（PC 端默认 0x3000000）。 */
-    private const val OFFSET_LIMIT = 0x3000000L
+    private const val ALIGN = 8
+    private const val TOKEN_COUNT = 256
+    private const val TOKEN_INDEX_SIZE = TOKEN_COUNT * 2
+    private const val MAX_TOKEN_LEN = 256
+    private const val MARKER_SEARCH_WINDOW = 4 * 1024 * 1024
+    private const val NAME_TAIL_SEARCH = 0x40000
+    private const val MIN_MARKERS = 8
+    private const val MAX_MARKERS = 4096
 
-    private const val MAX_TOKEN_LEN = 200
-    private const val MAX_TOKEN_TABLE_LEN = 4096
-    private const val MIN_MARKERS = 64
+    /** 合法 kallsyms 类型字符（内核 scripts/kallsyms.c 的允许集合）。 */
+    private val SYMBOL_TYPES = "aAbBcCdDeEfFgGiInNpPrRsStTuUvVwW?-".toByteArray()
 
-    /** names 末段长度上限（256 条记录 × 单条最大 ~250 字节）。 */
-    private const val MAX_TAIL_LEN = 65536
+    // ---- 带边界检查的小端读取（对应 Rust read_u16/u32/i32/u64 的 Option 语义） ----
 
-    /** markers 回溯/前扫跨度。 */
-    private const val MARKERS_SPAN = 6 * 1024 * 1024
+    private fun u16At(d: ByteArray, o: Int): Int? {
+        if (o < 0 || o + 2 > d.size) return null
+        return (d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8)
+    }
 
-    private const val NUM_SYMS_MIN = 20000
-    private const val NUM_SYMS_MAX = 400000
-
-
-    private fun u16(d: ByteArray, o: Int): Int =
-        (d[o].toInt() and 0xFF) or ((d[o + 1].toInt() and 0xFF) shl 8)
-
-    private fun u32(d: ByteArray, o: Int): Long =
-        (d[o].toLong() and 0xFF) or
+    private fun u32At(d: ByteArray, o: Int): Long? {
+        if (o < 0 || o + 4 > d.size) return null
+        return (d[o].toLong() and 0xFF) or
             ((d[o + 1].toLong() and 0xFF) shl 8) or
             ((d[o + 2].toLong() and 0xFF) shl 16) or
             ((d[o + 3].toLong() and 0xFF) shl 24)
+    }
 
-    private fun u64(d: ByteArray, o: Int): Long {
+    private fun i32At(d: ByteArray, o: Int): Long? =
+        u32At(d, o).let { if (it == null) null else if (it >= 0x80000000L) it - 0x100000000L else it }
+
+    private fun u64At(d: ByteArray, o: Int): Long? {
+        if (o < 0 || o + 8 > d.size) return null
         var r = 0L
         for (k in 7 downTo 0) r = (r shl 8) or (d[o + k].toLong() and 0xFF)
         return r
     }
 
-    private fun i32(d: ByteArray, o: Int): Long =
-        u32(d, o).let { if (it >= 0x80000000L) it - 0x100000000L else it }
+    private fun alignUp(value: Int, alignment: Int): Int =
+        (value + alignment - 1) and (alignment - 1).inv()
 
     /**
      * 按内核 `kallsyms_sym_address()` 语义把偏移表解码为绝对地址（移植自
-     * PC 端 tools/extract_rs/src/kallsyms_finder.rs 的 decode_addresses）：
+     * PC 端 decode_addresses 的解码核心）：
      *  - 负偏移占比过半 → ABSOLUTE_PERCPU 编码：负值 = base - 1 - offset
      *    （普通符号），正值 = 绝对地址（percpu 段，低地址）；
      *  - 否则 = BASE_RELATIVE 无符号：address = base + u32(offset)。
@@ -102,13 +93,13 @@ internal object KallsymsExtractor {
         if (off < 0 || off.toLong() + 4L * numSyms > d.size) return null
         var negatives = 0
         for (i in 0 until numSyms) {
-            if (i32(d, off + 4 * i) < 0) negatives++
+            if (i32At(d, off + 4 * i)!! < 0) negatives++
         }
         val signedMode = negatives * 2 >= numSyms
         val addresses = LongArray(numSyms)
         var prev = Long.MIN_VALUE
         for (i in 0 until numSyms) {
-            val v = i32(d, off + 4 * i)
+            val v = i32At(d, off + 4 * i)!!
             val a: Long = if (signedMode) {
                 if (v < 0) base - 1 - v else v
             } else {
@@ -121,132 +112,466 @@ internal object KallsymsExtractor {
         return addresses
     }
 
-    private fun ByteArray.indexOfByte(b: Byte, from: Int, limit: Int = size): Int {
-        var i = from.coerceAtLeast(0)
-        val end = minOf(limit, size)
-        while (i < end) {
-            if (this[i] == b) return i
+    /** 子数组搜索（对应 Rust find_subslice；返回首个 ≥ start 的命中）。 */
+    private fun findSubslice(data: ByteArray, needle: ByteArray, start: Int): Int? {
+        if (needle.isEmpty() || start > data.size) return null
+        val limit = data.size - needle.size
+        var i = start
+        while (i <= limit) {
+            if (data[i] == needle[0]) {
+                var j = 1
+                while (j < needle.size && data[i + j] == needle[j]) j++
+                if (j == needle.size) return i
+            }
             i++
         }
-        return -1
+        return null
     }
 
-    /** 读一条 kallsyms_names 记录（支持双字节长度转义）。返回下一记录位置，失败返回 -1。 */
-    private fun nextRecord(d: ByteArray, p: Int): Int {
-        if (p < 0 || p >= d.size) return -1
-        val b0 = d[p].toInt() and 0xFF
-        val len: Int
-        val hdr: Int
-        if (b0 and 0x80 != 0) {
-            if (p + 1 >= d.size) return -1
-            len = (b0 and 0x7F) or ((d[p + 1].toInt() and 0xFF) shl 7)
-            hdr = 2
-        } else {
-            len = b0
-            hdr = 1
+    /**
+     * arm64 Image 头 0x10 处声明的镜像尺寸（偏移 0x38 处须有 "ARM\x64" 魔数）。
+     * 声明值可能大于实际存放字节：vendor boot.img 打包常把尾部零（.bss/填充）
+     * 从 Image 里裁掉。
+     */
+    private fun arm64ImageSize(image: ByteArray): Long? {
+        if (image.size < 64) return null
+        if (image[0x38] != 'A'.code.toByte() || image[0x39] != 'R'.code.toByte() ||
+            image[0x3A] != 'M'.code.toByte() || image[0x3B] != 'd'.code.toByte()
+        ) {
+            return null
         }
-        if (len < 1) return -1
-        val nx = p + hdr + len
-        if (nx > d.size) return -1
-        return nx
+        val size = u64At(image, 0x10) ?: return null
+        return if (size != 0L) size else null
     }
 
-    /** 从 p 起走 k 条记录，返回落点；失败返回 -1。 */
-    private fun walk(d: ByteArray, from: Int, k: Int): Int {
-        var p = from
-        var i = 0
-        while (i < k) {
-            p = nextRecord(d, p)
-            if (p < 0) return -1
-            i++
+    private class TokenTable(
+        val tokens: List<ByteArray>,
+        val tableOffset: Int,
+        val indexOffset: Int,
+    )
+
+    /**
+     * 校验 start 处的 256 项 token 表，其 '0' 项必须恰在 digitOffset
+     * （数字 needle 的命中位置）。对应 Rust parse_token_table_at。
+     */
+    private fun parseTokenTableAt(image: ByteArray, start: Int, digitOffset: Int): TokenTable? {
+        if (start % ALIGN != 0) return null
+        val tokens = ArrayList<ByteArray>(TOKEN_COUNT)
+        val tokenOffsets = IntArray(TOKEN_COUNT)
+        val tokenStarts = IntArray(TOKEN_COUNT)
+        var position = start
+        for (i in 0 until TOKEN_COUNT) {
+            if (position >= image.size) return null
+            tokenStarts[i] = position
+            val searchEnd = minOf(position + MAX_TOKEN_LEN + 1, image.size)
+            var length = -1
+            for (k in position until searchEnd) {
+                if (image[k].toInt() == 0) {
+                    length = k - position
+                    break
+                }
+            }
+            if (length <= 0) return null
+            val end = position + length
+            for (k in position until end) {
+                val b = image[k].toInt() and 0xFF
+                if (b < 0x20 || b > 0x7E) return null
+            }
+            tokenOffsets[i] = position - start
+            tokens.add(image.copyOfRange(position, end))
+            position = end + 1
         }
-        return p
+
+        if (tokenStarts['0'.code] != digitOffset) return null
+        for (c in "0123456789_abcdefghijklmnopqrstuvwxyzT") {
+            val token = tokens[c.code]
+            if (token.size != 1 || token[0] != c.code.toByte()) return null
+        }
+
+        val indexOffset = alignUp(position, ALIGN)
+        for (k in position until indexOffset) {
+            if (image[k].toInt() != 0) return null
+        }
+        val indexEnd = indexOffset + TOKEN_INDEX_SIZE
+        if (indexEnd > image.size || tokenOffsets[TOKEN_COUNT - 1] > 0xFFFF) return null
+        for (i in 0 until TOKEN_COUNT) {
+            if (u16At(image, indexOffset + i * 2) != tokenOffsets[i]) return null
+        }
+        return TokenTable(tokens, start, indexOffset)
     }
 
-    private val isKernelAddr: (Long) -> Boolean = { it ushr 40 == 0xFFFFFFL }
-
-
-    fun extract(data: ByteArray): Result {
-        val problems = ArrayList<String>()
-        var best: Result? = null
-        var bestHit = -1
-
-        for (table in anchorTokenTables(data)) {
-            val tokens = try {
-                readTokens(data, table)
-            } catch (e: KallsymsError) {
-                problems.add("token 表 0x${table.toString(16)} 读取失败")
-                continue
+    /**
+     * 扫描镜像中的 token 表：先找 "0\0..9\0" 数字串，再枚举一切可能把
+     * '0' 项放到该处的 8 对齐表起点。对应 Rust find_token_tables。
+     */
+    private fun findTokenTables(image: ByteArray): List<TokenTable> {
+        val digitNeedle = ByteArray(20)
+        for (v in 0..9) {
+            digitNeedle[2 * v] = ('0' + v).code.toByte()
+            digitNeedle[2 * v + 1] = 0
+        }
+        val tables = ArrayList<TokenTable>()
+        var searchFrom = 0
+        while (true) {
+            val digitOffset = findSubslice(image, digitNeedle, searchFrom) ?: break
+            val earliest = (digitOffset - '0'.code * (MAX_TOKEN_LEN + 1)).coerceAtLeast(0)
+            var start = alignUp(earliest, ALIGN)
+            while (start <= digitOffset) {
+                parseTokenTableAt(image, start, digitOffset)?.let { tables.add(it) }
+                start += ALIGN
             }
-            var tableLen = 0
-            for (t in tokens) tableLen += t.size + 1
-            val tokenIndex = table + tableLen
+            searchFrom = digitOffset + 1
+            if (searchFrom >= image.size) break
+        }
+        return tables
+    }
 
-            val markerCands = markersCandidates(data, table)
-            if (markerCands.isEmpty()) {
-                problems.add("token 表 0x${table.toString(16)} 前无 markers")
-                continue
+    /**
+     * 从 start 起读 kallsyms_markers：首项 0、随后每项与前一项之差落在单个
+     * name 块（0x200..=0x40000）内；以 limit 为读界。对应 Rust read_markers。
+     */
+    private fun readMarkers(image: ByteArray, start: Int, limit: Long): IntArray {
+        if (start % ALIGN != 0 || start.toLong() + 8 > limit) return IntArray(0)
+        val first = u32At(image, start) ?: return IntArray(0)
+        val second = u32At(image, start + 4) ?: return IntArray(0)
+        if (first != 0L || second < 0x200 || second > 0x40000) return IntArray(0)
+
+        val markers = ArrayList<Int>(64)
+        markers.add(0)
+        markers.add(second.toInt())
+        var position = start + 8
+        while (markers.size < MAX_MARKERS && position.toLong() + 4 <= limit) {
+            val value = u32At(image, position) ?: break
+            val delta = value - markers[markers.size - 1]
+            if (delta < 0x200 || delta > 0x40000) break
+            markers.add(value.toInt())
+            position += 4
+        }
+        return if (markers.size < MIN_MARKERS) IntArray(0) else markers.toIntArray()
+    }
+
+    /**
+     * 走查 count 条长度前缀的 name 记录：每第 256 条必须命中对应 marker，
+     * 且整块恰好在 markersOffset 结束（对齐填充为零）。
+     * 返回交错的 (记录体偏移, 长度) 数组；对应 Rust parse_name_spans。
+     */
+    private fun parseNameSpans(
+        image: ByteArray,
+        namesOffset: Int,
+        count: Int,
+        markersOffset: Int,
+        markers: IntArray,
+        uleb128Lengths: Boolean,
+    ): IntArray? {
+        if (count == 0 || markers.size != (count + 255) / 256) return null
+
+        val spans = IntArray(count * 2)
+        var position = namesOffset
+        for (index in 0 until count) {
+            if (index % 256 == 0 && position - namesOffset != markers[index / 256]) return null
+            if (position >= markersOffset) return null
+            var length = image[position].toInt() and 0xFF
+            position++
+            if (uleb128Lengths && length and 0x80 != 0) {
+                if (position >= markersOffset) return null
+                val high = image[position].toInt() and 0xFF
+                if (high and 0x80 != 0) return null
+                length = (length and 0x7F) or (high shl 7)
+                position++
             }
+            if (length == 0 || length > 0x3FFF || position.toLong() + length > markersOffset) return null
+            spans[2 * index] = position
+            spans[2 * index + 1] = length
+            position += length
+        }
 
-            for ((markersStart, markers0) in markerCands) {
-                for (nc in namesCandidates(data, markersStart, markers0)) {
-                    val namesStart = nc.namesStart
-                    val numSyms = nc.numSyms
-                    val markers = nc.markers
+        if (alignUp(position, ALIGN) != markersOffset) return null
+        for (i in position until markersOffset) {
+            if (image[i].toInt() != 0) return null
+        }
+        return spans
+    }
 
-                    for ((off, base) in offsetsCandidates(data, nc.numPos, numSyms, tokenIndex)) {
-                        val r = build(data, off, numSyms, base, tokens, namesStart, markersStart)
-                            ?: continue
-                        val hit = TARGETS.count { r.symbols.containsKey(it) }
-                        if (hit > bestHit) {
-                            bestHit = hit
-                            best = r
+    /** 一块 names 的解码结果：类型字符 + 符号名，按记录顺序。 */
+    private class Names(val kinds: ByteArray, val names: Array<String>) {
+        val size: Int get() = kinds.size
+    }
+
+    /**
+     * 把 token 下标序列展开成 (类型字符, 名字)，并要求真实 kallsyms 表必有的
+     * 锚符号齐全。对应 Rust decode_names。
+     */
+    private fun decodeNames(image: ByteArray, spans: IntArray, tokens: List<ByteArray>): Names? {
+        val count = spans.size / 2
+        val kinds = ByteArray(count)
+        val names = Array(count) { "" }
+        for (i in 0 until count) {
+            val position = spans[2 * i]
+            val length = spans[2 * i + 1]
+            var expandedLength = 0
+            for (k in 0 until length) {
+                val token = tokens.getOrNull(image[position + k].toInt() and 0xFF) ?: return null
+                expandedLength += token.size
+            }
+            if (expandedLength > 4096) return null
+            val expanded = ByteArray(expandedLength)
+            var o = 0
+            for (k in 0 until length) {
+                val token = tokens[image[position + k].toInt() and 0xFF]
+                token.copyInto(expanded, o)
+                o += token.size
+            }
+            if (expandedLength == 0) return null
+            val kind = expanded[0]
+            if (!SYMBOL_TYPES.contains(kind)) return null
+            if (expandedLength == 1) return null
+            for (k in 1 until expandedLength) {
+                val b = expanded[k].toInt() and 0xFF
+                if (b < 0x21 || b > 0x7E) return null
+            }
+            val name = try {
+                expanded.decodeToString(1, expandedLength, throwOnInvalidSequence = true)
+            } catch (e: IllegalArgumentException) {
+                return null
+            }
+            kinds[i] = kind
+            names[i] = name
+        }
+
+        val present = HashSet<String>(count * 2)
+        for (name in names) present.add(name)
+        for (required in REQUIRED_SYMBOLS) {
+            if (required !in present) return null
+        }
+        return Names(kinds, names)
+    }
+
+    private class NameTable(
+        val numSymsOffset: Int,
+        val names: Names,
+    )
+
+    /**
+     * 恢复 names 块：在 token 表前搜 markers，再追查计数与填充都吻合的
+     * num_syms，u8 与 uleb128 两种长度编码都解码。对应 Rust find_name_tables。
+     */
+    private fun findNameTables(image: ByteArray, tokens: List<ByteArray>, tokenTableOffset: Int): List<NameTable> {
+        val lower = (tokenTableOffset - MARKER_SEARCH_WINDOW).coerceAtLeast(0)
+        val markerCandidates = ArrayList<Pair<Int, IntArray>>()
+        var position = alignUp(lower, ALIGN)
+        while (position.toLong() + 8 <= tokenTableOffset) {
+            val markers = readMarkers(image, position, tokenTableOffset.toLong())
+            if (markers.isNotEmpty()) {
+                markerCandidates.add(position to markers)
+            }
+            position += ALIGN
+        }
+
+        val recovered = ArrayList<NameTable>()
+        for ((markersOffset, markers) in markerCandidates) {
+            val minimumCount = (markers.size - 1) * 256 + 1
+            val maximumCount = markers.size * 256
+            val lastMarker = markers[markers.size - 1]
+            if (lastMarker > markersOffset) continue
+            val approximateNames = markersOffset - lastMarker
+            val searchStart = (approximateNames - NAME_TAIL_SEARCH).coerceAtLeast(0)
+            var numSymsOffset = approximateNames - approximateNames % ALIGN
+            while (true) {
+                if (numSymsOffset >= 0 && numSymsOffset + 8 <= image.size) {
+                    val countValue = u32At(image, numSymsOffset) ?: 0L
+                    val paddingIsZero = u32At(image, numSymsOffset + 4) == 0L
+                    if (countValue in minimumCount.toLong()..maximumCount.toLong() && paddingIsZero) {
+                        val count = countValue.toInt()
+                        val namesOffset = numSymsOffset + ALIGN
+                        val seenSpans = ArrayList<IntArray>()
+                        for (uleb128Lengths in booleanArrayOf(true, false)) {
+                            val spans = parseNameSpans(
+                                image, namesOffset, count, markersOffset, markers, uleb128Lengths,
+                            ) ?: continue
+                            if (seenSpans.any { it.contentEquals(spans) }) continue
+                            seenSpans.add(spans)
+                            decodeNames(image, spans, tokens)?.let {
+                                recovered.add(NameTable(numSymsOffset, it))
+                            }
                         }
-                        if (hit == TARGETS.size) return r
                     }
+                }
+                if (numSymsOffset < searchStart + ALIGN) break
+                numSymsOffset -= ALIGN
+            }
+        }
+        return recovered
+    }
+
+    private class RecoveredAddresses(
+        val relativeBase: Long,
+        val addresses: LongArray,
+    )
+
+    /**
+     * 把 kallsyms_offsets + kallsyms_relative_base 解码为绝对地址，要求
+     * 地址表非降且恰好张满整个镜像。对应 Rust decode_addresses 的完整校验。
+     */
+    private fun decodeAddressesFull(
+        image: ByteArray,
+        imageSize: Long,
+        names: Names,
+        offsetsOffset: Int,
+        relativeBaseOffset: Int,
+    ): RecoveredAddresses? {
+        val count = names.size
+        val offsetsEndL = offsetsOffset.toLong() + count * 4L
+        if (offsetsEndL > image.size) return null
+        val offsetsEnd = offsetsEndL.toInt()
+        if (relativeBaseOffset < offsetsEnd || relativeBaseOffset.toLong() + 8 > image.size) return null
+        for (i in offsetsEnd until relativeBaseOffset) {
+            if (image[i].toInt() != 0) return null
+        }
+        val relativeBase = u64At(image, relativeBaseOffset) ?: return null
+        if (relativeBase ushr 48 != 0xFFFFL || relativeBase and 0xFFFL != 0L) return null
+
+        val signed = LongArray(count)
+        var negatives = 0
+        for (i in 0 until count) {
+            val v = i32At(image, offsetsOffset + 4 * i) ?: return null
+            signed[i] = v
+            if (v < 0) negatives++
+        }
+        val addresses = LongArray(count)
+        if (negatives * 2 >= count) {
+            for (i in 0 until count) {
+                val v = signed[i]
+                addresses[i] = if (v < 0) relativeBase - 1 - v else v
+            }
+        } else {
+            for (i in 0 until count) {
+                val v = u32At(image, offsetsOffset + 4 * i) ?: return null
+                addresses[i] = relativeBase + v
+            }
+        }
+
+        for (i in 1 until count) {
+            if (addresses[i - 1] > addresses[i]) return null
+        }
+        var textCount = 0
+        var endCount = 0
+        var textAddress = 0L
+        var endAddress = 0L
+        for (i in 0 until count) {
+            when (names.names[i]) {
+                "_text" -> { textCount++; textAddress = addresses[i] }
+                "_end" -> { endCount++; endAddress = addresses[i] }
+            }
+        }
+        if (textCount != 1 || endCount != 1) return null
+        if (textAddress != relativeBase) return null
+        if (endAddress - textAddress != imageSize) return null
+
+        var ordinary = 0
+        var inImage = 0
+        for (i in 0 until count) {
+            val kind = names.kinds[i]
+            if (kind == 'A'.code.toByte() || kind == 'a'.code.toByte()) continue
+            if (addresses[i] == 0L) continue
+            ordinary++
+            if (addresses[i] >= textAddress && addresses[i] <= endAddress) inImage++
+        }
+        if (ordinary == 0 || inImage * 100 < ordinary * 90) return null
+
+        return RecoveredAddresses(relativeBase, addresses)
+    }
+
+    private class Candidate(
+        val relativeBase: Long,
+        val addresses: LongArray,
+        val names: Names,
+        val layout: String,
+    ) {
+        /** 恰有一条同名记录时返回其地址；重名（含同址）返回 null。 */
+        fun resolve(name: String): Long? {
+            var found: Long? = null
+            for (i in 0 until names.size) {
+                if (names.names[i] == name) {
+                    if (found != null) return null
+                    found = addresses[i]
+                }
+            }
+            return found
+        }
+    }
+
+    /**
+     * 从未压缩 arm64 Image 恢复完整 kallsyms 表（对应 Rust recover）。
+     *
+     * @param btf 可选的镜像内 BTF blob (文件偏移, 总长)；多候选存活时，
+     *            __start_BTF/__stop_BTF 能界定该 blob 的候选胜出。
+     */
+    private fun recover(image: ByteArray, btf: Pair<Int, Int>?): Result {
+        val imageSize = arm64ImageSize(image) ?: image.size.toLong()
+        val tokenTables = findTokenTables(image)
+        val candidates = ArrayList<Candidate>()
+        var nameBlocks = 0
+
+        for (table in tokenTables) {
+            for (nameTable in findNameTables(image, table.tokens, table.tableOffset)) {
+                nameBlocks++
+                val names = nameTable.names
+                val count = names.size
+                // pre-6.4：[offsets][relative_base][num_syms][pad][names]
+                val oldRelativeBase = (nameTable.numSymsOffset - ALIGN).coerceAtLeast(0)
+                val oldOffsets = (oldRelativeBase - alignUp(count * 4, ALIGN)).coerceAtLeast(0)
+                // 6.4+：[.. names][markers][token_table][token_index][offsets][relative_base]
+                val newOffsets = alignUp(table.indexOffset + TOKEN_INDEX_SIZE, ALIGN)
+                val newRelativeBase = alignUp(newOffsets + count * 4, ALIGN)
+                val layouts = arrayOf(
+                    Triple("pre-6.4", oldOffsets, oldRelativeBase),
+                    Triple("6.4+", newOffsets, newRelativeBase),
+                )
+                for ((layout, offsetsOffset, relativeBaseOffset) in layouts) {
+                    val recovered = decodeAddressesFull(image, imageSize, names, offsetsOffset, relativeBaseOffset)
+                        ?: continue
+                    candidates.add(Candidate(recovered.relativeBase, recovered.addresses, names, layout))
                 }
             }
         }
 
-        if (best != null && bestHit >= 1) return best
+        if (candidates.isEmpty()) {
+            // 完全没有 names 块 → kallsyms 被剥离/搬移；有 names 块但地址表
+            // 全灭 → offsets/relative_base 或 image_size 布局异常。
+            throw KallsymsError(
+                "内核镜像中未找到 kallsyms 表" +
+                    "（token 表 ${tokenTables.size} 个、names 块 $nameBlocks 个、image_size=0x${imageSize.toString(16)}）",
+            )
+        }
 
-        legacyExtract(data)?.let { return it }
-
-        val detail = problems.take(3).joinToString("；").ifEmpty { "无候选" }
-        throw KallsymsError("kallsyms 提取失败（$detail）")
-    }
-
-    private fun build(
-        data: ByteArray,
-        offsetsOff: Int,
-        numSyms: Int,
-        base: Long,
-        tokens: List<ByteArray>,
-        namesStart: Int,
-        markersStart: Int,
-    ): Result? {
-        if (!isKernelAddr(base)) return null
-        if (offsetsOff < 0 || offsetsOff.toLong() + 4L * numSyms > data.size) return null
-        val addresses = decodeAddresses(data, offsetsOff, numSyms, base) ?: return null
-        val symbols = HashMap<String, Long>(numSyms * 2)
-        val ambiguous = HashSet<String>()
-        var p = namesStart
-        for (i in 0 until numSyms) {
-            val b0 = data[p].toInt() and 0xFF
-            val len: Int
-            if (b0 and 0x80 != 0) {
-                if (p + 1 >= data.size) return null
-                len = (b0 and 0x7F) or ((data[p + 1].toInt() and 0xFF) shl 7)
-                p += 2
-            } else {
-                len = b0
-                p += 1
+        val boundaryMatches = ArrayList<Int>()
+        if (btf != null) {
+            for ((index, candidate) in candidates.withIndex()) {
+                val textBase = candidate.resolve("_text") ?: continue
+                val btfStart = candidate.resolve("__start_BTF") ?: continue
+                val btfStop = candidate.resolve("__stop_BTF") ?: continue
+                if (btfStart - textBase == btf.first.toLong() &&
+                    btfStop - btfStart == btf.second.toLong()
+                ) {
+                    boundaryMatches.add(index)
+                }
             }
-            if (len < 1 || p + len > data.size) return null
-            val raw = decode(tokens, data, p, len)
-            p += len
-            val name = if (raw.length <= 1) raw else raw.substring(1)
-            val address = addresses[i]
+        }
+
+        val selected = when {
+            boundaryMatches.size == 1 -> candidates[boundaryMatches[0]]
+            boundaryMatches.isEmpty() && candidates.size == 1 -> candidates[0]
+            else -> throw KallsymsError(
+                "kallsyms 恢复存在歧义" +
+                    "（token 表 ${tokenTables.size} 个、完整候选 ${candidates.size} 个、BTF 边界命中 ${boundaryMatches.size} 个）",
+            )
+        }
+
+        val symbols = HashMap<String, Long>(selected.names.size * 2)
+        val ambiguous = HashSet<String>()
+        for (i in 0 until selected.names.size) {
+            val name = selected.names.names[i]
+            val address = selected.addresses[i]
             val prev = symbols[name]
             if (prev != null && prev != address) {
                 ambiguous.add(name)
@@ -255,532 +580,13 @@ internal object KallsymsExtractor {
             }
         }
         for (name in ambiguous) symbols.remove(name)
-        if (p < markersStart - 8 || p > markersStart) return null
-        return Result(base, symbols, numSyms)
+        return Result(selected.relativeBase, symbols, selected.names.size)
     }
-
 
     /**
-     * 全镜像搜索 `kallsyms_token_index`（256 个严格递增 u16、首项 0、步长 1..65），
-     * 反推 `kallsyms_token_table` 起点并用「累计偏移逐一相等」验证。
-     */
-    private fun anchorTokenTables(d: ByteArray, limit: Int = 8): List<Int> {
-        val out = ArrayList<Int>()
-        val n = d.size
-        var i = 0
-        while (i + 512 < n) {
-            if (d[i].toInt() != 0 || d[i + 1].toInt() != 0) {
-                i++
-                continue
-            }
-            for (cand in intArrayOf(i, i + 1)) {
-                if (cand and 1 != 0 || cand + 512 > n) continue
-                var prev = 0
-                var ok = true
-                for (k in 1 until 256) {
-                    val v = u16(d, cand + 2 * k)
-                    val dv = v - prev
-                    if (dv < 1 || dv > 65) {
-                        ok = false
-                        break
-                    }
-                    prev = v
-                }
-                if (!ok) continue
-                val table = deriveTokenTable(d, cand) ?: continue
-                if (!out.contains(table)) {
-                    out.add(table)
-                    if (out.size >= limit) return out
-                }
-            }
-            i++
-        }
-        return out
-    }
-
-    /** 由 token_index 反推 token_table 起点；要求 256 个串的累计偏移与 u16 数组完全一致。 */
-    private fun deriveTokenTable(d: ByteArray, indexStart: Int): Int? {
-        val lastOff = u16(d, indexStart + 2 * 255)
-        val from = maxOf(0, indexStart - lastOff - 32)
-        val to = indexStart - lastOff
-        var table = from
-        while (table <= to) {
-            var q = table
-            var ok = true
-            for (k in 0 until 256) {
-                if (table + u16(d, indexStart + 2 * k) != q) {
-                    ok = false
-                    break
-                }
-                val e = d.indexOfByte(0, q, q + MAX_TOKEN_LEN + 1)
-                if (e < 0) {
-                    ok = false
-                    break
-                }
-                q = e + 1
-            }
-            if (ok && q - table in 400..MAX_TOKEN_TABLE_LEN) return table
-            table++
-        }
-        return null
-    }
-
-    private fun readTokens(data: ByteArray, table: Int): List<ByteArray> {
-        val tokens = ArrayList<ByteArray>(256)
-        var p = table
-        repeat(256) {
-            val end = data.indexOfByte(0, p, p + MAX_TOKEN_LEN + 1)
-            if (end < 0) throw KallsymsError("truncated token table")
-            tokens.add(data.copyOfRange(p, end))
-            p = end + 1
-        }
-        return tokens
-    }
-
-
-    /**
-     * 找 markers 数组（首项 0、严格递增），返回 [(起点, 值数组)]，由近及远最多 [limit] 个。
+     * 提取入口。失败抛 [KallsymsError]（消息含结构统计，供导入对话框展示）。
      *
-     * 两条路子：
-     *  1. 紧贴 token_table 之前（允许 0..24 字节对齐填充）；
-     *  2. 向前全跨度扫描（6.4+ 内核在 markers 与 token_table 之间插了
-     *     `kallsyms_seqs_of_names`，3 字节/符号，实测跨度可达 300KB+）。
+     * @param btf 镜像内 BTF blob 的 (偏移, 总长)，见 [BootImageParser.findBtfBlob]。
      */
-    private fun markersCandidates(d: ByteArray, table: Int, limit: Int = 3): List<Pair<Int, IntArray>> {
-        val out = ArrayList<Pair<Int, IntArray>>()
-        val seen = HashSet<Int>()
-
-        fun add(start: Int, vals: IntArray) {
-            if (start < 0 || vals.size < MIN_MARKERS || vals[0] != 0) return
-            if (!seen.add(start)) return
-            out.add(start to vals)
-        }
-
-        for (pad in intArrayOf(0, 4, 8, 12, 16, 20, 24)) {
-            val end = table - pad
-            if (end < 4) continue
-            val r = walkBackMarkers(d, end) ?: continue
-            add(r.first, r.second)
-        }
-        if (out.isNotEmpty()) return out
-
-        val lo = maxOf(4, table - MARKERS_SPAN)
-        var p = table - 4
-        while (p >= lo && out.size < limit) {
-            if (u32(d, p) == 0L) {
-                val v1 = u32(d, p + 4)
-                val v2 = u32(d, p + 8)
-                val v3 = u32(d, p + 12)
-                if (v1 >= 256 && v1 <= 40000 && v2 > v1 && v2 <= 80000 && v3 > v2 && v3 <= 120000) {
-                    val vals = ArrayList<Int>(2048)
-                    var q = p
-                    var prev = -1L
-                    while (q + 4 <= d.size && vals.size < 4096) {
-                        val v = u32(d, q)
-                        if (prev >= 0 && v <= prev) break
-                        if (v > 40_000_000L) break
-                        vals.add(v.toInt())
-                        prev = v
-                        q += 4
-                    }
-                    if (vals.size >= MIN_MARKERS) add(p, vals.toIntArray())
-                }
-            }
-            p -= 4
-        }
-        return out
-    }
-
-    /** 从 end（不含）往前读一段严格递增 u32，要求最后读到 0。 */
-    private fun walkBackMarkers(d: ByteArray, end: Int): Pair<Int, IntArray>? {
-        if (end > d.size) return null
-        var p = end - 4
-        if (p < 0) return null
-        val vals = ArrayList<Int>(2048)
-        while (p >= 0 && vals.size < 4096) {
-            val v = u32(d, p)
-            if (v == 0L) {
-                vals.add(0)
-                break
-            }
-            if (vals.isNotEmpty() && v >= vals[vals.size - 1]) return null
-            if (v > 40_000_000L) return null
-            vals.add(v.toInt())
-            p -= 4
-        }
-        if (vals.size < MIN_MARKERS || vals[vals.size - 1] != 0) return null
-        vals.reverse()
-        return (end - 4 * vals.size) to vals.toIntArray()
-    }
-
-
-    private class NamesCand(
-        val namesStart: Int,
-        val numPos: Int,
-        val numSyms: Int,
-        val markers: IntArray,
-    )
-
-    /**
-     * 由 markers 反推 names 起点与 num_syms。
-     *
-     * 切入点：`walk(namesStart, 256) == namesStart + markers[1]`
-     * （组推进量等于 markers 相邻差值），这是最快的筛选条件。
-     * 搜索窗口用 markers 的尾部值估计（真数组可能被多读 1~2 项，故按
-     * 「项数 = ceil(num/256) 且 num ≈ 项数×256」枚举几个可能的尾值）。
-     */
-    private fun namesCandidates(d: ByteArray, markersStart: Int, markers0: IntArray): List<NamesCand> {
-        val out = ArrayList<NamesCand>()
-        if (markers0.size < 2) return out
-        val tgt = markers0[1] - markers0[0]
-        if (tgt <= 0) return out
-
-        val guesses = ArrayList<Int>()
-        for (k in 0..2) {
-            val m = markers0.size - k
-            if (m >= 8) guesses.add(markers0[m - 1])
-        }
-
-        for (lastGuess in guesses) {
-            val hi = minOf(d.size - 1, markersStart - lastGuess + 64)
-            val lo = maxOf(0, markersStart - lastGuess - MAX_TAIL_LEN)
-            if (hi < lo) continue
-            var start = lo
-            while (start <= hi) {
-                val p256 = walk(d, start, 256)
-                if (p256 < 0 || p256 - start != tgt) {
-                    start++
-                    continue
-                }
-                var numPos = -1
-                var numSyms = 0
-                for (dd in intArrayOf(4, 8, 12, 16)) {
-                    val np = start - dd
-                    if (np < 4) continue
-                    val v = u32(d, np)
-                    if (v < NUM_SYMS_MIN || v > NUM_SYMS_MAX) continue
-                    val n = v.toInt()
-                    val m = (n + 255) / 256
-                    if (m <= markers0.size && markers0.size - m <= 2) {
-                        numPos = np
-                        numSyms = n
-                        break
-                    }
-                }
-                if (numPos < 0) {
-                    start++
-                    continue
-                }
-                val m = (numSyms + 255) / 256
-                if (m < 2) {
-                    start++
-                    continue
-                }
-                val markers = markers0.copyOf(m)
-                if (!verifyAllGroups(d, start, markers)) {
-                    start++
-                    continue
-                }
-                val end = walk(d, start, numSyms)
-                if (end < 0 || end < markersStart - 8 || end > markersStart) {
-                    start++
-                    continue
-                }
-                out.add(NamesCand(start, numPos, numSyms, markers))
-                start++
-            }
-            if (out.isNotEmpty()) break
-        }
-        return out.take(4)
-    }
-
-    /** 用 markers 的**全部**组边界校验 names 起点。 */
-    private fun verifyAllGroups(d: ByteArray, start: Int, markers: IntArray): Boolean {
-        for (i in 0 until markers.size - 1) {
-            val p = walk(d, start + markers[i], 256)
-            if (p < 0 || p != start + markers[i + 1]) return false
-        }
-        return true
-    }
-
-
-    private fun ascendingAt(d: ByteArray, off: Int, num: Int): Boolean {
-        if (off < 0 || off.toLong() + 4L * num > d.size) return false
-        var last = u32(d, off)
-        val limit = maxOf(OFFSET_LIMIT, d.size.toLong() * 2)
-        if (last >= limit) return false
-        for (i in 1 until num) {
-            val v = u32(d, off + 4 * i)
-            if (v < last || v >= limit) return false
-            last = v
-        }
-        return last > 0
-    }
-
-    /**
-     * offsets/base 候选。三种实测布局都试，且容忍 0..12 字节对齐填充：
-     *  (a) `[base][offsets][num_syms][names]`
-     *  (b) `[offsets][base][num_syms][names]`
-     *  (c) `[names][markers][token_table][token_index][offsets][base]`
-     */
-    private fun offsetsCandidates(
-        d: ByteArray,
-        numPos: Int,
-        numSyms: Int,
-        tokenIndex: Int,
-    ): List<Pair<Int, Long>> {
-        val out = ArrayList<Pair<Int, Long>>()
-        val seen = HashSet<Int>()
-
-        fun add(off: Int, base: Long) {
-            if (!isKernelAddr(base)) return
-            /* 无符号相对表走 ascendingAt 快筛；有符号（ABSOLUTE_PERCPU）表
-             * u32 视角不递增，改用 decodeAddresses 完整校验（含早退）。 */
-            if (!ascendingAt(d, off, numSyms) &&
-                decodeAddresses(d, off, numSyms, base) == null
-            ) return
-            if (!seen.add(off)) return
-            out.add(off to base)
-        }
-
-        for (pb in intArrayOf(8, 12, 16, 4)) {
-            val bpos = numPos - pb
-            if (bpos < 8 || bpos + 8 > d.size) continue
-            val base = u64(d, bpos)
-            if (!isKernelAddr(base)) continue
-            for (pad in intArrayOf(0, 4, 8, 12)) {
-                add(bpos - pad - 4 * numSyms, base)
-            }
-            for (pad in intArrayOf(0, 4, 8, 12)) {
-                val off = numPos - pad - 4 * numSyms
-                if (off < 0) continue
-                val after = off + 4 * numSyms
-                if (after + 8 <= d.size) add(off, u64(d, after))
-            }
-            break
-        }
-
-        val end = minOf(d.size, tokenIndex + 0x40000)
-        var q = tokenIndex
-        while (q.toLong() + 4L * numSyms + 24 <= end) {
-            var hit: Long? = null
-            for (pad in intArrayOf(0, 4, 8, 12)) {
-                val b = u64(d, q + 4 * numSyms + pad)
-                if (isKernelAddr(b)) {
-                    hit = b
-                    break
-                }
-            }
-            if (hit != null) {
-                add(q, hit)
-                if (out.isNotEmpty()) break
-            }
-            q += 4
-        }
-
-        if (out.isEmpty()) {
-            val limit = maxOf(OFFSET_LIMIT, d.size.toLong() * 2)
-            val cells = d.size / 4
-            var i = 0
-            while (i < cells) {
-                val v = u32(d, i * 4)
-                if (v >= limit) {
-                    i++
-                    continue
-                }
-                var j = i + 1
-                var last = v
-                while (j < cells) {
-                    val w = u32(d, j * 4)
-                    if (w < last || w >= limit) break
-                    last = w
-                    j++
-                }
-                if (j - i == numSyms) {
-                    val off = i * 4
-                    for (pad in intArrayOf(0, 4, 8, 12)) {
-                        val bp = off + 4 * numSyms + pad
-                        if (bp + 8 <= d.size && isKernelAddr(u64(d, bp))) {
-                            add(off, u64(d, bp))
-                            break
-                        }
-                    }
-                }
-                i = j
-            }
-        }
-        return out
-    }
-
-
-    private fun legacyExtract(data: ByteArray): Result? {
-        return try {
-            val (offsetsOff, numSyms) = longestAscending(data) ?: return null
-            val tokenTable = findTokenTable(data, offsetsOff)
-            val tokens = readTokens(data, tokenTable)
-            val (markersStart, markers) = findMarkers(data, tokenTable, numSyms)
-            val namesStart = findNamesStart(data, markersStart, markers)
-            val base = tryRelativeBase(data, offsetsOff, numSyms) ?: return null
-            build(data, offsetsOff, numSyms, base, tokens, namesStart, markersStart)
-        } catch (e: KallsymsError) {
-            null
-        } catch (e: RuntimeException) {
-            null
-        }
-    }
-
-    /**
-     * 最长非降 u32 run（返回 (字节偏移, 条数)）。
-     *
-     *  1. 上限必须随镜像大小放大：offsets 最大值不超过镜像大小，
-     *     写死 48MB 会让 50MB+ 的 raw 内核在数组中途被判定越界。
-     *  2. 必须排除全零 run：镜像尾部几百 KB 零填充也满足「非降」。
-     */
-    private fun longestAscending(data: ByteArray): Pair<Int, Int>? {
-        val limit = maxOf(OFFSET_LIMIT, data.size.toLong() * 2)
-        var bestOff = 0
-        var bestCount = 0
-        val n = data.size / 4
-        var i = 0
-        while (i < n) {
-            val v = u32(data, i * 4)
-            if (v < limit) {
-                var j = i + 1
-                var last = v
-                while (j < n) {
-                    val w = u32(data, j * 4)
-                    if (w < last || w >= limit) break
-                    last = w
-                    j++
-                }
-                if (last > 0 && j - i > bestCount) {
-                    bestOff = i * 4
-                    bestCount = j - i
-                }
-                i = j
-            } else {
-                i++
-            }
-        }
-        return if (bestCount < 1000) null else bestOff to bestCount
-    }
-
-    private fun tryRelativeBase(data: ByteArray, offsetsOff: Int, numSyms: Int): Long? {
-        val raw = offsetsOff + 4 * numSyms
-        for (delta in intArrayOf(0, 4, 8, 12, 16, 24, 32)) {
-            val cand = raw + delta
-            if (cand + 8 > data.size) continue
-            val value = u64(data, cand)
-            if (isKernelAddr(value)) return value
-        }
-        return null
-    }
-
-    /** 旧启发式：恰好 256 个连续、NUL 结尾的可打印短串。 */
-    private fun findTokenTable(data: ByteArray, startHint: Int): Int {
-        val searchFrom = maxOf(0, startHint - 8 * 1024 * 1024)
-        val total = data.size
-        var segStart = 0
-        var runCount = 0
-        var runStartOff = -1
-        while (segStart < total) {
-            val nul = data.indexOfByte(0, segStart)
-            val segEnd = if (nul < 0) total else nul
-            val len = segEnd - segStart
-            var acceptable = len in 1..MAX_TOKEN_LEN
-            if (acceptable) {
-                for (k in segStart until segEnd) {
-                    val c = data[k].toInt() and 0xFF
-                    if (c < 0x20 || c >= 0x7F) {
-                        acceptable = false
-                        break
-                    }
-                }
-            }
-            if (segStart >= searchFrom && acceptable) {
-                if (runCount == 0) runStartOff = segStart
-                runCount++
-            } else {
-                if (runCount == 256) return runStartOff
-                runCount = 0
-            }
-            segStart = segEnd + 1
-        }
-        if (runCount == 256) return runStartOff
-        throw KallsymsError("no kallsyms_token_table candidate found")
-    }
-
-    /** 旧启发式 markers：按 numSyms 限界回溯。 */
-    private fun findMarkers(data: ByteArray, tokenTable: Int, numSyms: Int): Pair<Int, IntArray> {
-        val expected = (numSyms + 255) / 256
-        val window = minOf(4 * 1024 * 1024, 3 * numSyms + 65536)
-        val lo = maxOf(0, tokenTable - window)
-        var endPos = tokenTable
-        while (endPos % 4 != 0 && endPos > lo) endPos--
-        while (endPos >= lo) {
-            if (endPos >= 4) {
-                val lastVal = u32(data, endPos - 4)
-                if (lastVal in 1..4_000_000L) {
-                    val values = ArrayList<Int>()
-                    var p = endPos - 4
-                    var prev = -1L
-                    while (p - 4 >= 0 && values.size <= expected) {
-                        val v = u32(data, p)
-                        if (prev >= 0 && v >= prev) break
-                        values.add(v.toInt())
-                        prev = v
-                        p -= 4
-                    }
-                    if (values.size >= 2 && values[values.size - 1] == 0) {
-                        values.reverse()
-                        if (values[0] == 0 &&
-                            kotlin.math.abs(values.size - expected) <= 1 &&
-                            isStrictlyIncreasing(values)
-                        ) {
-                            return (endPos - 4 * values.size) to values.toIntArray()
-                        }
-                    }
-                }
-            }
-            endPos -= 4
-        }
-        throw KallsymsError("markers array not found before token table")
-    }
-
-    private fun isStrictlyIncreasing(values: List<Int>): Boolean {
-        for (i in 1 until values.size) {
-            if (values[i] <= values[i - 1]) return false
-        }
-        return true
-    }
-
-    /** 旧启发式 names 起点：在估计窗口内逐个试。 */
-    private fun findNamesStart(data: ByteArray, markersStart: Int, markers: IntArray): Int {
-        if (markers.size < 2) throw KallsymsError("markers too short")
-        val tgt = markers[1] - markers[0]
-        val last = markers[markers.size - 1]
-        val lo = maxOf(0, markersStart - last - MAX_TAIL_LEN)
-        val hi = minOf(data.size - 1, markersStart - last + 64)
-        var start = lo
-        while (start <= hi) {
-            val p = walk(data, start, 256)
-            if (p >= 0 && p - start == tgt && verifyAllGroups(data, start, markers)) return start
-            start++
-        }
-        throw KallsymsError("names start: no candidate passed validation")
-    }
-
-    /** token 索引序列 → 符号名（含首字符类型）。 */
-    private fun decode(tokens: List<ByteArray>, d: ByteArray, off: Int, len: Int): String {
-        var total = 0
-        for (k in 0 until len) total += tokens[d[off + k].toInt() and 0xFF].size
-        val out = ByteArray(total)
-        var o = 0
-        for (k in 0 until len) {
-            val t = tokens[d[off + k].toInt() and 0xFF]
-            t.copyInto(out, o)
-            o += t.size
-        }
-        return out.decodeToString(0, total, throwOnInvalidSequence = false)
-    }
+    internal fun extract(data: ByteArray, btf: Pair<Int, Int>? = null): Result = recover(data, btf)
 }

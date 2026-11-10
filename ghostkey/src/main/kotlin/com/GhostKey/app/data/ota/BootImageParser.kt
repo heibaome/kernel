@@ -129,7 +129,8 @@ class BootImageParser {
     fun parse(bootImg: ByteArray): ExtractedKernelInfo {
         val image = decodeKernelImage(bootImg)
         val release = extractRelease(image)
-        val btfOffset = findBtf(image)
+        val btfBlob = findBtfBlob(image)
+        val btfOffset = btfBlob?.first ?: -1
         val structOffsets = if (btfOffset >= 0) parseBtfStructOffsets(image, btfOffset) else null
         val credLayout = if (btfOffset >= 0) Btf(image, btfOffset).layout("cred") else null
         val notes = mutableListOf<String>()
@@ -140,7 +141,7 @@ class BootImageParser {
         var symbolCount = 0
         var imageBase = DEFAULT_IMAGE_BASE
         try {
-            val ks = KallsymsExtractor.extract(image)
+            val ks = KallsymsExtractor.extract(image, btfBlob)
             symbols = ks.symbols
             symbolCount = ks.numSyms
             imageBase = ks.imageBase
@@ -311,11 +312,20 @@ class BootImageParser {
 
 
     /** 对应 PC 端 btf_offsets.find_btf：搜索 BTF 魔数并校验头部。 */
-    private fun findBtf(data: ByteArray): Int {
+    private fun findBtf(data: ByteArray): Int = findBtfBlob(data)?.first ?: -1
+
+    /**
+     * 定位 BTF blob：返回 (镜像内偏移, blob 总长)。总长 = 24(hdr_len) + type_len +
+     * str_len（本校验路径强制 type_off==0、str_off==type_len，与 PC 端
+     * boot.embedded_btf_at 的 hdr_len + max(type_off+type_len, str_off+str_len) 等价）。
+     * 供 [KallsymsExtractor] 的多候选仲裁（__start_BTF/__stop_BTF 边界）使用。
+     */
+    private fun findBtfBlob(data: ByteArray): Pair<Int, Int>? {
         val needle = byteArrayOf(0x9F.toByte(), 0xEB.toByte(), 0x01.toByte(), 0x00.toByte())
         var idx = 0
         var best = -1
         var bestTypeLen = 0
+        var bestStrLen = 0
         while (true) {
             idx = data.indexOfBytes(needle, idx)
             if (idx < 0) break
@@ -340,11 +350,12 @@ class BootImageParser {
                 if (typeLen > bestTypeLen) {
                     best = idx
                     bestTypeLen = typeLen
+                    bestStrLen = strLen
                 }
             }
             idx += 1
         }
-        return best
+        return if (best < 0) null else best to (24 + bestTypeLen + bestStrLen)
     }
 
     private fun parseBtfStructOffsets(image: ByteArray, btfOffset: Int): StructOffsets {
