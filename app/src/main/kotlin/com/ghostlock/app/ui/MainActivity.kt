@@ -205,6 +205,7 @@ private fun GhostlockRoute(
             override fun onCloseExecutionSheet() = viewModel.onCloseExecutionSheet()
             override fun onCopyLogs() = viewModel.copyLogs()
             override fun onShowRunHistory() = viewModel.onShowRunHistory()
+            override fun onOpenRunLogSheet() = viewModel.onOpenRunLogSheet()
             override fun onSelectRunLog(meta: RunLogMeta) = viewModel.onSelectRunLog(meta)
             override fun onCloseRunHistory() = viewModel.onCloseRunHistory()
             override fun onImportOffsetsHocon() = viewModel.importOffsetsHocon()

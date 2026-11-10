@@ -1277,6 +1277,20 @@ class GhostlockViewModel(
         }
     }
 
+    /** 主界面「查看历史运行日志」入口：打开执行面板并直接进入历史模式（不触发任何执行）。 */
+    fun onOpenRunLogSheet() {
+        if (running) return
+        mutableState.update {
+            it.copy(
+                executionSheetVisible = true,
+                executionSheetDismissible = true,
+                runHistoryVisible = true,
+                runHistoryBody = null,
+            )
+        }
+        onShowRunHistory()
+    }
+
     /** 历史列表：读取某次运行的完整文本。 */
     fun onSelectRunLog(meta: com.GhostKey.app.data.RunLogMeta) {
         viewModelScope.launch(Dispatchers.IO) {

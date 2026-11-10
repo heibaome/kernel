@@ -260,6 +260,7 @@ interface GhostlockActions {
     fun onCopyLogs()
     /** 执行 sheet：打开落盘的历史运行日志列表。 */
     fun onShowRunHistory()
+    fun onOpenRunLogSheet()
     /** 历史列表：查看某次运行的完整日志。 */
     fun onSelectRunLog(meta: RunLogMeta)
     /** 历史详情：返回列表。 */
@@ -1191,9 +1192,13 @@ internal fun DebugExportCard(
                 )
                 Text(
                     text = stringResource(R.string.gk_debug_card_body),
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+                ArrowPreference(
+                    title = stringResource(R.string.gk_run_history_entry),
+                    onClick = actions.onOpenRunLogSheet,
                 )
             }
         }
