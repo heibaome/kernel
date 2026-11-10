@@ -90,11 +90,18 @@ class GhostKeyEngineBridge(context: Context) {
     fun importText(displayName: String, text: String): ImportOutcome =
         engine.profiles.importer.importProfile(displayName, text)
 
-    /** 从 SAF Uri 读字节后导入 boot.img；返回 null 表示读取失败。 */
+    /**
+     * 从 SAF Uri 读字节后导入 boot.img。文件流读取失败时不再返回 null，
+     * 而是返回携带底层异常的 Err——读取失败与解析失败必须能在结果弹窗里区分开。
+     */
     fun importImgFromUri(uri: Uri, displayName: String): ImportOutcome? {
-        val bytes = runCatching {
+        val bytes = try {
             appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        }.getOrNull() ?: return null
+        } catch (e: OutOfMemoryError) {
+            return ImportOutcome.Err("无法读取所选文件（内存不足，文件可能过大）")
+        } catch (e: Exception) {
+            return ImportOutcome.Err("无法读取所选文件（${e.javaClass.simpleName}）: ${e.message}")
+        } ?: return ImportOutcome.Err("无法读取所选文件（内容提供者未返回数据流）")
         return importImg(displayName, bytes)
     }
 
