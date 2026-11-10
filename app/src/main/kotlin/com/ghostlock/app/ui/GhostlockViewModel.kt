@@ -63,6 +63,8 @@ enum class DocumentRequest {
     VendorBootImage,
     /** GhostKey 引擎的 boot.img profile 导入（独立体系，经 GhostKeyEngineBridge）。 */
     GhostKeyBootImg,
+    /** GhostKey 引擎的 profile 配置文件（.conf 文本）导入。 */
+    GhostKeyConf,
 }
 
 /** Options offered by [promptBootAttach], in display order. VENDOR_BOOT is
@@ -1315,6 +1317,44 @@ class GhostlockViewModel(
         }
     }
 
+    /** GhostKey .conf 配置文件导入入口（SAF 选择器）。 */
+    fun importGhostKeyConf() =
+        send(GhostlockEffect.PickDocument(DocumentRequest.GhostKeyConf))
+
+    /** 读取选中的 .conf 文本，经桥接层 importText 直接存入 GK profile 库。 */
+    private fun importGhostKeyConf(uri: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val name = uri.toUri().lastPathSegment?.let(Uri::decode)
+                    ?: uri.substringAfterLast('/')
+                val text = repository.readDocument(uri)
+                when (val outcome = ghostKeyBridge.importText(name, text)) {
+                    is com.GhostKey.app.data.ImportOutcome.Ok -> {
+                        appendLog("<k> GhostKey profile imported from conf: ${outcome.release}")
+                        if (!outcome.complete) {
+                            appendLog("<-> missing fields: ${outcome.missing.joinToString()}")
+                            showNotice(R.string.import_result_title, R.string.import_no_match)
+                        } else {
+                            showNotice(R.string.import_result_title, R.string.import_success)
+                        }
+                    }
+                    is com.GhostKey.app.data.ImportOutcome.Err -> {
+                        appendLog("<-> import failed: ${outcome.message}")
+                        showNotice(R.string.import_result_title, R.string.import_failed)
+                    }
+                    null -> {
+                        appendLog("<-> import failed: cannot read document")
+                        showNotice(R.string.import_result_title, R.string.import_failed)
+                    }
+                }
+                refreshGhostKeyStatus()
+            } catch (e: Exception) {
+                appendLog("<-> import failed: ${e.message}")
+                showNotice(R.string.import_result_title, R.string.import_failed)
+            }
+        }
+    }
+
     fun onCloseExecutionSheet() {
         if (running && !state.value.executionSheetDismissible) return
         mutableState.update { it.copy(executionSheetVisible = false) }
@@ -1395,6 +1435,7 @@ class GhostlockViewModel(
             DocumentRequest.VendorBootImage -> stageVendorBoot(uri)
             DocumentRequest.PayloadImage -> stagePayload(uri)
             DocumentRequest.GhostKeyBootImg -> importGhostKeyImg(uri)
+            DocumentRequest.GhostKeyConf -> importGhostKeyConf(uri)
             DocumentRequest.ImportOffsetsHocon, DocumentRequest.ImportOffsetsJson -> Unit
         }
     }

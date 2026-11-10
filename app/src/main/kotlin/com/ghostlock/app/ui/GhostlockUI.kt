@@ -237,6 +237,8 @@ interface GhostlockActions {
     fun onEngineSelected(engine: ExploitEngine)
     /** GhostKey 引擎：发起 boot.img profile 导入选择器。 */
     fun onGhostKeyImportBoot()
+    /** GhostKey 引擎：发起 .conf profile 配置文件导入选择器。 */
+    fun onGhostKeyImportConf()
     /** GhostKey 引擎：选用/清除用户 profile（null = 自动匹配）。 */
     fun onGhostKeyProfileSelected(fileName: String?)
     /** GhostKey 引擎：删除已导入的用户 profile。 */
@@ -1204,6 +1206,7 @@ private fun EngineOption(
 private fun GhostKeyProfileCard(
     state: GhostlockUiState,
     onImportBoot: () -> Unit,
+    onImportConf: () -> Unit,
     onProfileSelected: (String?) -> Unit,
     onProfileDeleted: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -1245,6 +1248,13 @@ private fun GhostKeyProfileCard(
                 title = stringResource(R.string.ghostkey_import_boot),
                 summary = stringResource(R.string.ghostkey_import_boot_summary),
                 onClick = onImportBoot,
+            )
+        }
+        Card {
+            ArrowPreference(
+                title = stringResource(R.string.ghostkey_import_conf),
+                summary = stringResource(R.string.ghostkey_import_conf_summary),
+                onClick = onImportConf,
             )
         }
         if (selectedFile != null) {
@@ -1295,6 +1305,7 @@ internal fun GhostKeyConfigScreen(
                 GhostKeyProfileCard(
                     state = state,
                     onImportBoot = actions::onGhostKeyImportBoot,
+                    onImportConf = actions::onGhostKeyImportConf,
                     onProfileSelected = actions::onGhostKeyProfileSelected,
                     onProfileDeleted = actions::onGhostKeyProfileDeleted,
                     modifier = Modifier.fillMaxWidth(),

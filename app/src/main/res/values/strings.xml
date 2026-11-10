@@ -311,6 +311,8 @@
     <string name="ghostkey_profile_missing">No matching profile — import a boot.img below</string>
     <string name="ghostkey_import_boot">Import boot.img</string>
     <string name="ghostkey_import_boot_summary">Parse a boot image to build the offset profile</string>
+    <string name="ghostkey_import_conf">Import profile document</string>
+    <string name="ghostkey_import_conf_summary">Import a .conf produced by the PC-side extractor; no boot.img parsing needed</string>
     <string name="ghostkey_delete_profile">Delete profile %1$s</string>
     <!-- GhostKey merged safety confirmation -->
     <string name="ghostkey_confirm_title">Run GhostKey?</string>

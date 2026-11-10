@@ -311,6 +311,8 @@ Substituí-los pelos novos valores?"</string>
     <string name="ghostkey_profile_missing">Nenhum perfil correspondente — importe um boot.img abaixo</string>
     <string name="ghostkey_import_boot">Importar boot.img</string>
     <string name="ghostkey_import_boot_summary">Analisa a imagem de boot e gera o perfil no próprio aparelho (não participa das atualizações na nuvem)</string>
+    <string name="ghostkey_import_conf">Importar documento de perfil</string>
+    <string name="ghostkey_import_conf_summary">Importa um .conf gerado no PC; sem necessidade de analisar boot.img</string>
     <string name="ghostkey_delete_profile">Excluir perfil %1$s</string>
     <string name="ghostkey_confirm_title">Executar GhostKey?</string>
     <string name="ghostkey_confirm_body">O GhostKey executa o pipeline CVE-2026-98260 (calibração, injeção de payload nativo, verificação, handoff do KernelSU). A injeção do payload traz risco de brick. Use apenas em dispositivos seus, para pesquisa de segurança autorizada.</string>

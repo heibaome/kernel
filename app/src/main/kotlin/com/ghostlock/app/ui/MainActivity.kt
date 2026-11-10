@@ -191,6 +191,8 @@ private fun GhostlockRoute(
                 viewModel.requestGhostKeyBootImport()
             }
 
+            override fun onGhostKeyImportConf() = viewModel.importGhostKeyConf()
+
             override fun onGhostKeyProfileSelected(fileName: String?) =
                 viewModel.onGhostKeyProfileSelected(fileName)
 

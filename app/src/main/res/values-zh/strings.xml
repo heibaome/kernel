@@ -311,6 +311,8 @@
     <string name="ghostkey_profile_missing">未匹配到 profile —— 请在下方导入 boot.img</string>
     <string name="ghostkey_import_boot">导入 boot.img</string>
     <string name="ghostkey_import_boot_summary">解析 boot 镜像在本机生成 profile（不参与云端更新）</string>
+    <string name="ghostkey_import_conf">导入 Profile 配置文件</string>
+    <string name="ghostkey_import_conf_summary">直接导入 .conf（PC 端提取产出），无需 boot.img 解析</string>
     <string name="ghostkey_delete_profile">删除 profile %1$s</string>
     <!-- GhostKey 合并安全确认 -->
     <string name="ghostkey_confirm_title">运行 GhostKey？</string>
