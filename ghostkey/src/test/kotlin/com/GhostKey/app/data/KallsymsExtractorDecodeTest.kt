@@ -9,7 +9,8 @@ import org.junit.Test
 /** decodeAddresses 的两种编码解码 + 排序校验（对应内核 kallsyms_sym_address 语义）。 */
 class KallsymsExtractorDecodeTest {
 
-    private val base = 0xFFFFFFC080000000L
+    // 位模式 0xFFFFFFC080000000（Kotlin 不允许超出 Long.MAX_VALUE 的十六进制字面量）
+    private val base = -0x3F80000000L
 
     private fun s32(v: Int) = byteArrayOf(
         (v and 0xFF).toByte(),

@@ -12,9 +12,9 @@ private const val PAGE_SIZE = 4096
 
 /**
  * 默认内核镜像虚拟基址（0xFFFFFFC080000000）。
- * 注意：该值超过 Long.MAX_VALUE，故用其有符号补码表示以保持位模式一致。
+ * 注意：该位模式超出 Long.MAX_VALUE，用其有符号补码字面量表示。
  */
-private const val DEFAULT_IMAGE_BASE = -0x3F8000000L
+private const val DEFAULT_IMAGE_BASE = -0x3F80000000L
 
 
 private fun u16(d: ByteArray, o: Int): Int =

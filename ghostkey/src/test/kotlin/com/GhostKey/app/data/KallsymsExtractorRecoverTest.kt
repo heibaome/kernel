@@ -24,7 +24,8 @@ import org.junit.Test
  */
 class KallsymsExtractorRecoverTest {
 
-    private val base = 0xFFFFFFC080000000L
+    // 位模式 0xFFFFFFC080000000（Kotlin 不允许超出 Long.MAX_VALUE 的十六进制字面量）
+    private val base = -0x3F80000000L
 
     private class Sym(val kind: Char, val name: String, val address: Long)
 
@@ -109,7 +110,8 @@ class KallsymsExtractorRecoverTest {
         sorted.forEachIndexed { i, sym ->
             val v: Long = when {
                 !signed -> sym.address - base
-                sym.address < base -> sym.address
+                // percpu 绝对地址是位模式为小正数的低地址；base 为负 Long
+                sym.address >= 0 -> sym.address
                 else -> -(sym.address - base) - 1L
             }
             putU32(out, 4 * i, v)
