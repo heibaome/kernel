@@ -24,14 +24,15 @@ class KallsymsExtractorDecodeTest {
 
     @Test
     fun `signed percpu table decodes to absolute addresses`() {
-        // 60 负（普通符号，base-1-offset）+ 40 正（percpu 绝对低地址）：占比过半 → 有符号模式
-        val positives = (1..40).map { it * 0x1000 }          // 低地址，表按地址排序故排最前
-        val negatives = (40 downTo 1).map { -(it * 0x1000) } // 越负地址越高 → 非降
+        // 40 正（percpu 绝对低地址，表按地址排序故排最前）+ 40 负（普通符号）：
+        // 负占比恰好过半（negatives*2 >= count）→ 有符号模式
+        val positives = (1..40).map { it * 0x1000 }
+        val negatives = (1..40).map { -(it * 0x1000) } // |v| 递增 → 地址非降
         val data = table(positives + negatives)
-        val addresses = KallsymsExtractor.decodeAddresses(data, 0, 100, base)!!
-        assertEquals(40, addresses[0])
+        val addresses = KallsymsExtractor.decodeAddresses(data, 0, 80, base)!!
+        assertEquals(0x1000L, addresses[0])
         assertEquals(base - 1 + 0x1000, addresses[40])
-        assertEquals(base - 1 + 40 * 0x1000, addresses[99])
+        assertEquals(base - 1 + 40 * 0x1000, addresses[79])
     }
 
     @Test
