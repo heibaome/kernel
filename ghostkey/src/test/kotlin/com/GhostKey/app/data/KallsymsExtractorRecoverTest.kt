@@ -71,7 +71,8 @@ class KallsymsExtractorRecoverTest {
 
     /** names 记录流（支持 uleb128 双字节长度头）+ 每 256 条一个 marker（记录流偏移）。 */
     private fun buildNamesAndMarkers(symbols: List<Sym>, flavor: Int): Pair<ByteArray, IntArray> {
-        val sorted = symbols.sortedBy { it.address }
+        // 无符号地址序（翻转符号位）：percpu 小地址排在内核高地址之前，与真实表一致
+        val sorted = symbols.sortedBy { it.address xor Long.MIN_VALUE }
         val out = java.io.ByteArrayOutputStream()
         val markers = ArrayList<Int>()
         var recPos = 0
@@ -105,7 +106,7 @@ class KallsymsExtractorRecoverTest {
 
     /** offsets 表：无符号 = addr-base；有符号 = percpu 绝对地址 / 普通符号负编码。 */
     private fun buildOffsets(symbols: List<Sym>, signed: Boolean): ByteArray {
-        val sorted = symbols.sortedBy { it.address }
+        val sorted = symbols.sortedBy { it.address xor Long.MIN_VALUE }
         val out = ByteArray(sorted.size * 4)
         sorted.forEachIndexed { i, sym ->
             val v: Long = when {
@@ -131,7 +132,7 @@ class KallsymsExtractorRecoverTest {
         signed: Boolean = false,
         headerPrefix: Boolean = false,
     ): ByteArray {
-        val sorted = symbols.sortedBy { it.address }
+        val sorted = symbols.sortedBy { it.address xor Long.MIN_VALUE }
         val n = sorted.size
         val (table, tokenOffsets) = buildTokenTable(flavor)
         val index = ByteArray(512)

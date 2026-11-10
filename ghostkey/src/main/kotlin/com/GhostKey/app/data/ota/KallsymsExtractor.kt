@@ -97,17 +97,18 @@ internal object KallsymsExtractor {
         }
         val signedMode = negatives * 2 >= numSyms
         val addresses = LongArray(numSyms)
-        var prev = Long.MIN_VALUE
         for (i in 0 until numSyms) {
             val v = i32At(d, off + 4 * i)!!
-            val a: Long = if (signedMode) {
+            addresses[i] = if (signedMode) {
                 if (v < 0) base - 1 - v else v
             } else {
                 base + (v and 0xFFFFFFFFL)
             }
-            if (a < prev) return null
-            prev = a
-            addresses[i] = a
+        }
+        // kallsyms 按地址排序；表可跨 percpu 低地址与内核高地址（位模式），
+        // 必须按无符号比较（对应 Rust 的 u64 比较）
+        for (i in 1 until numSyms) {
+            if (java.lang.Long.compareUnsigned(addresses[i - 1], addresses[i]) > 0) return null
         }
         return addresses
     }
@@ -450,8 +451,9 @@ internal object KallsymsExtractor {
             }
         }
 
+        // 地址表非降；percpu 低地址与内核高地址共存，按无符号比较（Rust u64）
         for (i in 1 until count) {
-            if (addresses[i - 1] > addresses[i]) return null
+            if (java.lang.Long.compareUnsigned(addresses[i - 1], addresses[i]) > 0) return null
         }
         var textCount = 0
         var endCount = 0
