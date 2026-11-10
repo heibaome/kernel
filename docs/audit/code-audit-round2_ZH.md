@@ -79,13 +79,66 @@ B-01 用等价实现交叉验证（`/tmp/btf_probe.py`：同一份合成 BTF，�
 即：单条 `linkage=1` 的 `FUNC` 就足以让 Kotlin 侧丢掉 `task_struct`；结合 B-02，
 真机上要么报「缺字段」（导入失败），要么拿到 `task_cred=0` 的「完整」profile。
 
-## 结论
+## 核实记录（审计发出后的逐条复核）
 
-- 解析链的**算法移植**在 kallsyms 侧是忠实的（本轮未发现新问题），但 BTF 侧存在一处
-  移植引入的推进错误（B-01），并且整条链在「拿不到就填 0」这一点上是**失效放行**而非
-  失效安全（B-02、B-03、B-09）。
-- 这解释了真机导入 boot.img 的失败并非单一原因：2.0.18 解决了 300 MB 文件的内存问题，
-  但 B-01/B-02 仍会让 BTF 字段缺失或为 0。
-- 真正的危险不是「导入失败」，而是 **B-02 + B-03 组合会让 0 偏移的 profile 一路执行到
-  写内核**。建议优先级：B-01、B-02、B-03 三处一起修（解析正确性 + 缺失即拒绝 + native
-  硬失败），再处理 B-04。
+P1 全部亲自读源复核，两处结论修正如下。
+
+**B-01 确认成立，且比原记录更严重——共三处推进错误**（`BootImageParser.kt:491-501, 506-511`）：
+
+| kind | 含义 | Kotlin 现状 | 上游 `btf.rs` / BTF 规范 |
+| --- | --- | --- | --- |
+| 12 | `FUNC`（vlen=linkage，无 payload） | `pos += 12 * vlen` | 单位 0，不乘 vlen（`btf.rs:113, 208-212`） |
+| 19 | `ENUM64` | 落入 `else → btfPayload` = 0 | 12 × vlen（`btf.rs:120`） |
+| 17 | `DECL_TAG` | 落入 `else` = 0 | 8（`btf.rs:118`） |
+
+真实 vmlinux BTF 按 CU 顺序去重发射：`arch/` 等 CU 的全局 `FUNC` 记录（linkage=1）
+必然出现在 `kernel/cred.c`、`kernel/fork.c` 的 `task_struct`/`cred` 类型之前，
+**第一条全局 FUNC 之后整条类型流即错位**。6.1+ 内核普遍含 `ENUM64`，是第二个
+必然错位源。实际后果：`structSize("task_struct")`/`memberBitOffset` 全部落空 →
+`ImgToProfile` 不写 `task_cred/task_struct_size/cred_uid` → 导入结果报
+「missing fields: offset.task_cred, offset.task_struct_size, offset.cred_uid」，
+执行被 `ExploitEngine:87-101` 阻断。**即 B-01 是 boot.img 导入必然缺 BTF 字段
+的确定性缺陷，而非直接 panic 路径。**
+
+**B-02 结论收窄（维持缺陷本身，调低复合危害表述）**：`?: 0` 兜底要求
+「struct 记录幸存但成员丢失」才产生 0 偏移——B-01 的确定性错位反而使 struct 落空、
+走「缺字段」的安全拒绝路径。因此 **B-01 单独出现时不会产生 0 偏移 profile**；
+B-02 + B-03 的 0 偏移直达内核写入链需要一个较窄的巧合（错位恰好对齐出同名
+struct 而成员缺失）。两者仍须一起修：B-02 是纵深防御，B-03 是 native 侧闸门。
+
+**B-03 逐行确认**（`kernel_table.c`）：
+
+- `:189-193` 完整性检查仅 `timer_link/cred_link/selinux_link` 三个非 0；
+  `page_offset/user_ns/root_user/groups/ucounts/task_cred/task_struct_size/
+  cred_uid/kitimer_node` 及全部 `cred_off_*` 无任何值域/对齐检查。
+- `:233-239` `parse_blob` 失败 → `load_builtin_fallback()` → **`return 0`**，
+  以 PKJ110 6.6.118 硬编码地址继续执行，且 `main.c:94-98` 无任何阻断。
+- `:180-181` `g_offsets.cred_off_groups + 8` 为 u32 运算，`0xFFFFFFFC + 8`
+  回绕为 4，可通过「`cred_off_groups+8 <= cred_size`」边界检查（NV-04 同证）。
+- `:204-231` 未收到 blob / 长度非法 / malloc 失败 / 数据不完整 → 全部回落
+  fallback 并 `return 0`。
+
+**B-04 逐行确认**（`Cve98260UserService.kt`）：
+
+- `:208` `exploitProcess` 赋值后全仓从不置空；`:1164` `destroy()` 在
+  `!running.get()` 时对其 `Process.destroy()`（SIGTERM）。
+- `:425-427` 超时路径「left it alive on purpose (killing native processes can
+  drop the pin … panic)」——正是该路径返回后 `running` 变 false（`:104`），
+  宿主 `unbind` 触发 Shizuku destroy 事务，SIGTERM 打在存活的 pin 持有进程上。
+- 竞态另一分支：destroy 事务先于 `:104` 到达时直接 return，服务既不
+  `exitProcess` 也无人再调 destroy → 残留 app_process。
+- `ExploitEngine.stopExploit():237` 与 `GhostKeyEngineBridge.stop():207`
+  全仓无调用者（`stop` 未接 UI），用户无法主动中止运行。
+
+## 结论（核实后修订）
+
+- kallsyms 移植忠实（未发现新问题）；BTF 移植存在**三处**推进错误（FUNC/ENUM64/
+  DECL_TAG，见 B-01），其中 FUNC 与 ENUM64 在真实 vmlinux 上是**必然**触发的确定性
+  缺陷——boot.img 导入将稳定报缺 `task_cred/task_struct_size/cred_uid`，执行被
+  安全阻断。
+- 修正后的风险定位：B-01 = 确定的功能失效（导入不可用）；B-02/B-03/B-09 = 「缺失
+  即 0、失败即回落」的失效放行设计，0 偏移直达内核写入需要较窄巧合，但一旦发生
+  即 panic，须按纵深防御一起修。
+- 修复优先级：B-01（恢复 BTF 字段提取）→ B-03（native 解析失败硬失败、fallback
+  仅限未收到 blob 且 release 一致）→ B-02（缺失成员拒绝写入）→ B-04（destroy 去
+  SIGTERM）。
