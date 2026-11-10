@@ -147,6 +147,9 @@
     <string name="ghostkey_config_title">Configuração do GhostKey</string>
     <string name="gk_debug_card_title">Logs de execução</string>
     <string name="gk_debug_card_body">Os logs de execução do GhostKey ficam no diretório privado do app (run_logs/) e aparecem ao vivo no painel de execução; nada é gravado no armazenamento compartilhado.</string>
+    <string name="gk_run_history_entry">Ver logs de execução salvos</string>
+    <string name="gk_run_history_back">Voltar à lista de execuções</string>
+    <string name="gk_run_history_empty">Nenhum log de execução salvo</string>
 <string name="import_missing_includes">Arquivos de inclusão ausentes; selecione-os junto com o perfil e tente novamente</string>
 <string name="import_no_match">Importado, mas seu lançamento não corresponde a este kernel e não será aplicado</string>
 <string name="import_result_title">Resultado da importação</string>

@@ -34,6 +34,9 @@
     <string name="ghostkey_config_title">GhostKey configuration</string>
     <string name="gk_debug_card_title">Run logs</string>
     <string name="gk_debug_card_body">GhostKey run logs are stored in the app\'s private directory (run_logs/) and stream live in the execution sheet; nothing is written to shared storage.</string>
+    <string name="gk_run_history_entry">View saved run logs</string>
+    <string name="gk_run_history_back">Back to run list</string>
+    <string name="gk_run_history_empty">No saved run logs yet</string>
     <string name="import_missing_includes">Missing include files; select them together with the profile and retry</string>
     <string name="offsets_already_exist">Offsets already exist (built-in)</string>
     <string name="overwrite_title">Kernel offsets already exist</string>

@@ -20,6 +20,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.GhostKey.app.data.RunLogMeta
 import com.ghostlock.app.GhostlockApplication
 import com.ghostlock.app.R
 import com.ghostlock.app.ghostkey.GhostKeyEngineBridge
@@ -203,6 +204,9 @@ private fun GhostlockRoute(
             override fun onStatusClick() = viewModel.onStatusClick()
             override fun onCloseExecutionSheet() = viewModel.onCloseExecutionSheet()
             override fun onCopyLogs() = viewModel.copyLogs()
+            override fun onShowRunHistory() = viewModel.onShowRunHistory()
+            override fun onSelectRunLog(meta: RunLogMeta) = viewModel.onSelectRunLog(meta)
+            override fun onCloseRunHistory() = viewModel.onCloseRunHistory()
             override fun onImportOffsetsHocon() = viewModel.importOffsetsHocon()
             override fun onImportOffsetsJson() = viewModel.importOffsetsJson()
             override fun onDocumentsResult(request: DocumentRequest, uris: List<String>) =

@@ -4,8 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -65,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghostlock.app.BuildConfig
 import com.ghostlock.app.R
+import com.GhostKey.app.data.RunLogMeta
 import com.ghostlock.app.data.ManagerScanner
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.ExecutionFieldValue
@@ -73,6 +76,9 @@ import com.ghostlock.app.domain.model.ShizukuStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.ghostlock.app.domain.model.UserProfileFile
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -92,6 +98,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Copy
+import top.yukonga.miuix.kmp.icon.basic.ArrowRight
 import top.yukonga.miuix.kmp.nav.core.NavBackStack
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
@@ -215,6 +222,10 @@ data class GhostlockUiState(
     val managerCandidates: List<ManagerScanner.Candidate> = emptyList(),
     val selectedManagerPackage: String? = null,
     val managerPickerVisible: Boolean = false,
+    /** 执行 sheet 历史模式：显示落盘的运行日志列表/正文（panic 后唯一现场）。 */
+    val runHistoryVisible: Boolean = false,
+    val runHistory: List<RunLogMeta> = emptyList(),
+    val runHistoryBody: String? = null,
 )
 
 enum class DialogType { NONE, LIST, INPUT, CONFIRM, NOTICE }
@@ -247,6 +258,12 @@ interface GhostlockActions {
     fun onStatusClick()
     fun onCloseExecutionSheet()
     fun onCopyLogs()
+    /** 执行 sheet：打开落盘的历史运行日志列表。 */
+    fun onShowRunHistory()
+    /** 历史列表：查看某次运行的完整日志。 */
+    fun onSelectRunLog(meta: RunLogMeta)
+    /** 历史详情：返回列表。 */
+    fun onCloseRunHistory()
     fun onImportOffsetsHocon()
     fun onImportOffsetsJson()
     fun onDocumentsResult(request: DocumentRequest, uris: List<String>)
@@ -543,15 +560,136 @@ private fun GhostlockExecutionSheet(
             }
         },
         content = {
-            LogPanel(
-                lines = state.logLines,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 240.dp, max = 520.dp)
                     .navigationBarsPadding(),
-            )
+            ) {
+                if (!state.runHistoryVisible) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = actions::onShowRunHistory)
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.gk_run_history_entry),
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                if (state.runHistoryVisible) {
+                    GhostKeyRunHistoryPanel(
+                        state = state,
+                        actions = actions,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp, max = 520.dp),
+                    )
+                } else {
+                    LogPanel(
+                        lines = state.logLines,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp, max = 520.dp),
+                    )
+                }
+            }
         },
     )
+}
+
+/**
+ * GhostKey 落盘运行日志面板：列表 → 正文两级；正文可长按选择复制。
+ * panic 重启后这里读出的归档（run_logs/run-*.log）是唯一的执行现场。
+ */
+@Composable
+private fun GhostKeyRunHistoryPanel(
+    state: GhostlockUiState,
+    actions: GhostlockActions,
+    modifier: Modifier = Modifier,
+) {
+    val body = state.runHistoryBody
+    Column(modifier = modifier) {
+        if (body != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = actions::onCloseRunHistory)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Back,
+                    contentDescription = stringResource(R.string.gk_run_history_back),
+                    tint = MiuixTheme.colorScheme.onBackground,
+                )
+                Text(
+                    text = stringResource(R.string.gk_run_history_back),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.primary,
+                )
+            }
+            SelectionContainer {
+                Text(
+                    text = body,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackground,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                )
+            }
+        } else if (state.runHistory.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.gk_run_history_empty),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onBackgroundVariant,
+                )
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(state.runHistory.size) { index ->
+                    val meta = state.runHistory[index]
+                    val stamp = remember(meta.runId) {
+                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                            .format(Date(meta.startedAt))
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = { actions.onSelectRunLog(meta) })
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "#${meta.runId}  $stamp",
+                                color = MiuixTheme.colorScheme.onBackground,
+                            )
+                            Text(
+                                text = "${meta.result.label} · ${meta.kernel} · ${meta.profile}",
+                                style = MiuixTheme.textStyles.body2,
+                                color = MiuixTheme.colorScheme.onBackgroundVariant,
+                            )
+                        }
+                        Icon(
+                            imageVector = MiuixIcons.Basic.ArrowRight,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onBackgroundVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

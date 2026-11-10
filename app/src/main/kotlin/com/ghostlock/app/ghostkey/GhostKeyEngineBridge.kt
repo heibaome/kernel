@@ -3,6 +3,7 @@ package com.ghostlock.app.ghostkey
 import android.content.Context
 import android.net.Uri
 import com.GhostKey.app.data.ImportOutcome
+import com.GhostKey.app.data.RunLogMeta
 import com.GhostKey.app.data.RunLogStore
 import com.GhostKey.app.data.RunResult
 import com.GhostKey.app.data.StoredProfile
@@ -183,7 +184,11 @@ class GhostKeyEngineBridge(context: Context) {
             val stages = NativeContract.Stage.ORDERED
             var exit = 1
             engine.executeExploit(
-                onLog = { message -> appendLog(message) },
+                /* native 详细输出同样落盘：panic 杀进程后归档正文是唯一现场。 */
+                onLog = { message ->
+                    appendLog(message)
+                    currentSession?.append(message)
+                },
                 onProgress = { stage, status ->
                     val name = stages.getOrNull(stage) ?: "STAGE"
                     appendLog("[*] stage ${stage + 1}/${stages.size} $name: ${status ?: ""}")
@@ -205,4 +210,12 @@ class GhostKeyEngineBridge(context: Context) {
     }
 
     fun stop() = engine.stopExploit()
+
+    // ---- 历史运行日志（panic 后 UI 内存日志丢失，落盘归档是唯一现场） ----
+
+    /** 全部运行记录，按开始时间倒序。IO 密集，请在后台线程调用。 */
+    fun runHistory(): List<RunLogMeta> = runLogStore.listRuns()
+
+    /** 某次运行的完整文本（信息头 + 正文），供展示/复制。 */
+    fun runLogText(meta: RunLogMeta): String = runLogStore.textOf(meta)
 }

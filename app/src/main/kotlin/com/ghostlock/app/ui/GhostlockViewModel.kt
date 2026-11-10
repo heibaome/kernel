@@ -1266,6 +1266,32 @@ class GhostlockViewModel(
         refreshGhostKeyStatus()
     }
 
+    /** 执行 sheet：打开落盘历史运行日志（panic 后 UI 内存日志丢失，这里是唯一现场）。 */
+    fun onShowRunHistory() {
+        mutableState.update { it.copy(runHistoryVisible = true, runHistoryBody = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val runs = ghostKeyBridge.runHistory()
+            mutableState.update {
+                if (it.runHistoryVisible) it.copy(runHistory = runs) else it
+            }
+        }
+    }
+
+    /** 历史列表：读取某次运行的完整文本。 */
+    fun onSelectRunLog(meta: com.GhostKey.app.data.RunLogMeta) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val text = ghostKeyBridge.runLogText(meta)
+            mutableState.update {
+                if (it.runHistoryVisible) it.copy(runHistoryBody = text) else it
+            }
+        }
+    }
+
+    /** 历史详情：返回列表。 */
+    fun onCloseRunHistory() {
+        mutableState.update { it.copy(runHistoryVisible = false, runHistoryBody = null) }
+    }
+
     /** GhostKey boot.img 导入：走 SAF 选择器，经桥接层解析生成 profile。 */
     private fun importGhostKeyImg(uri: String) {
         if (!beginOperation(showLogSheet = false)) return

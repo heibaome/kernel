@@ -34,6 +34,9 @@
     <string name="ghostkey_config_title">GhostKey 配置</string>
     <string name="gk_debug_card_title">运行日志</string>
     <string name="gk_debug_card_body">GhostKey 的每次运行日志保存在应用私有目录（run_logs/），执行面板可实时查看，不写入公共存储。</string>
+    <string name="gk_run_history_entry">查看历史运行日志</string>
+    <string name="gk_run_history_back">返回运行列表</string>
+    <string name="gk_run_history_empty">暂无历史运行日志</string>
     <string name="import_missing_includes">缺少 include 依赖文件，请将依赖文件与配置一并选中后重试</string>
     <string name="offsets_already_exist">偏移已存在（内置）</string>
     <string name="overwrite_title">已存在偏移数据</string>
