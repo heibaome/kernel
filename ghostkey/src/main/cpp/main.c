@@ -85,14 +85,22 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (!strcmp(command, "dump-config")) {
-        kernel_table_load_from_stdin();
+        if (kernel_table_load_from_stdin() != 0) {
+            fprintf(stderr, "[config] refusing to dump an unverified kernel table\n");
+            return 1;
+        }
         kernel_table_dump();
         return 0;
     }
 
     /* load the kernel table first (from the stdin length-prefixed blob), then dispatch */
     if (needs_profile(command)) {
-        kernel_table_load_from_stdin();
+        /* Hard-fail on parse/validation errors: running with an unverified
+         * (or fallback-mismatched) table writes wrong addresses into the kernel. */
+        if (kernel_table_load_from_stdin() != 0) {
+            fprintf(stderr, "[config] refusing to run with an unverified kernel table\n");
+            return 1;
+        }
         /* R4: 默认只保留加载摘要（一行），全量表在 C98260_DUMP=1 或 dump-config 时打印 */
         kernel_table_dump_if_requested();
     }

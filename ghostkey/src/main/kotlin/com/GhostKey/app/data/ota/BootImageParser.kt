@@ -385,9 +385,13 @@ class BootImageParser {
 
     private fun parseBtfStructOffsets(image: ByteArray, btfOffset: Int): StructOffsets {
         val btf = Btf(image, btfOffset)
+        // task_cred 是执行关键偏移：成员读不到就不能产出（宁缺勿错——
+        // 0 偏移会作为「完整」profile 一路执行到写内核）。缺失时 taskStruct
+        // 置 null，ImgToProfile 不写字段，missingRequiredFields 会回报。
         val taskStruct = btf.structSize("task_struct")?.let { size ->
+            val cred = btf.memberBitOffset("task_struct", "cred") ?: return@let null
             TaskStructOffsets(
-                cred = (btf.memberBitOffset("task_struct", "cred") ?: 0) / 8,
+                cred = cred / 8,
                 realCred = (btf.memberBitOffset("task_struct", "real_cred") ?: 0) / 8,
                 pid = (btf.memberBitOffset("task_struct", "pid") ?: 0) / 8,
                 size = size,
@@ -479,35 +483,41 @@ private class Btf(data: ByteArray, base: Int) {
             val kflag = (info shr 31) and 1
             pos += 12
             val entry = BtfType(string(nameOff), kind, size, mutableListOf())
-            if (kind == KIND_STRUCT || kind == KIND_UNION) {
-                val members = entry.members as MutableList
-                for (m in 0 until vlen) {
-                    val mName = u32(data, pos)
-                    val mOff = u32(data, pos + 8)
-                    pos += 12
-                    val bitOffset: Long = if (kflag == 1) (mOff and 0xFFFFFF).toLong() else mOff.toLong()
-                    members.add(BtfMember(string(mName), bitOffset))
+            when (kind) {
+                KIND_STRUCT, KIND_UNION -> {
+                    val members = entry.members as MutableList
+                    for (m in 0 until vlen) {
+                        if (pos + 12 > end) return
+                        val mName = u32(data, pos)
+                        val mOff = u32(data, pos + 8)
+                        pos += 12
+                        val bitOffset: Long = if (kflag == 1) (mOff and 0xFFFFFF).toLong() else mOff.toLong()
+                        members.add(BtfMember(string(mName), bitOffset))
+                    }
                 }
-            } else if (kind == 13) {
-                pos += 8 * vlen
-            } else if (kind == 6) {
-                pos += 8 * vlen
-            } else if (kind == 12) {
-                pos += 12 * vlen
-            } else if (kind == 15) {
-                pos += 12 * vlen
-            } else {
-                pos += btfPayload(kind)
+                // FUNC_PROTO: btf_param[8] × vlen
+                13 -> pos += 8 * vlen
+                // ENUM: btf_enum[8] × vlen
+                6 -> pos += 8 * vlen
+                // ENUM64: btf_enum64[12] × vlen（vmlinux BTF 里 6.1+ 普遍存在）
+                19 -> pos += 12 * vlen
+                // DATASEC: btf_var_secinfo[12] × vlen
+                15 -> pos += 12 * vlen
+                else -> pos += btfPayload(kind)
             }
             types.add(entry)
         }
     }
 
+    /** 单记录（非数组型）kind 的 payload 长度，对应 btf.rs 的 fixed 单位表。 */
     private fun btfPayload(kind: Int): Int = when (kind) {
-        1 -> 4
-        3 -> 12
-        14 -> 4
-        else -> 0
+        1 -> 4    // INT: btf_int
+        3 -> 12   // ARRAY: btf_array
+        14 -> 4   // VAR: btf_var
+        17 -> 8   // DECL_TAG: btf_decl_tag（component_idx；vlen 是 flags，不乘）
+        else -> 0 // PTR/FWD/TYPEDEF/qualifier/FUNC/FLOAT/TYPE_TAG：无 payload。
+                  // 关键：FUNC(12) 的 vlen 是 linkage（0/1/2），不是记录条数，
+                  // 绝不能按 vlen 推进（对齐 tools/extract_rs/src/btf.rs:113）。
     }
 
     fun structSize(name: String): Long? {

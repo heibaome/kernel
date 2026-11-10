@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/utsname.h>
 
 #include "kernel_table.h"
 
@@ -105,7 +106,14 @@ static void apply_cred_defaults(struct kernel_offsets *o) {
     o->cred_off_groups = 160;
 }
 
-/* built-in fallback: PKJ110 6.6.118 (still runs when assets are missing) */
+/*
+ * built-in fallback: PKJ110 6.6.118 (still runs when assets are missing)
+ *
+ * The fallback may ONLY run when its release matches the host kernel
+ * (uname -r prefix match): running with a mismatched hardcoded table
+ * writes wrong addresses into the kernel. Callers gate via
+ * load_fallback_if_host_matches().
+ */
 static void load_builtin_fallback(void) {
     memset(&g_offsets, 0, sizeof(g_offsets));
     copy_str(g_offsets.release, sizeof(g_offsets.release),
@@ -126,6 +134,28 @@ static void load_builtin_fallback(void) {
     g_offsets.kitimer_size = 0x108ULL;
     apply_cred_defaults(&g_offsets);
     g_offsets_loaded = 1;
+}
+
+/*
+ * Host-gated fallback: load the built-in table and keep it only when its
+ * release is consistent with the running kernel. Returns 0 on success,
+ * -1 when the fallback does not match the host (caller must hard-fail).
+ */
+static int load_fallback_if_host_matches(void) {
+    struct utsname uts;
+    load_builtin_fallback();
+    if (uname(&uts) != 0) {
+        fprintf(stderr, "[config] error: uname failed, fallback table unusable\n");
+        g_offsets_loaded = 0;
+        return -1;
+    }
+    if (strncmp(g_offsets.release, uts.release, strnlen(uts.release, sizeof(uts.release))) != 0) {
+        fprintf(stderr, "[config] error: built-in fallback (%s) does not match host kernel (%s)\n",
+                g_offsets.release, uts.release);
+        g_offsets_loaded = 0;
+        return -1;
+    }
+    return 0;
 }
 
 /* parse the fixed-size blob */
@@ -176,9 +206,10 @@ static int parse_blob(const uint8_t *blob, uint32_t length) {
         g_offsets.cred_off_user_ns = rd_u32(blob + 296);
         g_offsets.cred_off_ucounts = rd_u32(blob + 300);
         g_offsets.cred_off_groups  = rd_u32(blob + 304);
-        /* Boundary validation: the last field must fit inside sizeof(struct cred). */
+        /* Boundary validation: the last field must fit inside sizeof(struct cred).
+         * 64-bit arithmetic — u32 would wrap (0xFFFFFFFC + 8 == 4) and pass. */
         if (g_offsets.cred_size < 64 || g_offsets.cred_size > 4096 ||
-            g_offsets.cred_off_groups + 8 > g_offsets.cred_size) {
+            (uint64_t)g_offsets.cred_off_groups + 8 > (uint64_t)g_offsets.cred_size) {
             fprintf(stderr, "[config] warn: cred layout invalid, using 6.6 defaults\n");
             apply_cred_defaults(&g_offsets);
         }
@@ -186,9 +217,19 @@ static int parse_blob(const uint8_t *blob, uint32_t length) {
         apply_cred_defaults(&g_offsets);
     }
 
-    /* integrity check: critical fields must not be 0 */
-    if (!g_offsets.timer_link || !g_offsets.cred_link || !g_offsets.selinux_link) {
-        fprintf(stderr, "[config] error: profile critical offsets missing\n");
+    /*
+     * Integrity check: every offset that reaches the kernel must be non-zero.
+     * A zero value means an upstream extraction field went missing; running
+     * with it would write/dereference wrong kernel addresses. Missing fields
+     * are rejected upstream (Kotlin missingRequiredFields), this is the
+     * last-line defense — hard-fail instead of silently continuing.
+     */
+    if (!g_offsets.page_offset || !g_offsets.timer_link || !g_offsets.cred_link ||
+        !g_offsets.selinux_link || !g_offsets.user_ns || !g_offsets.root_user ||
+        !g_offsets.groups || !g_offsets.ucounts ||
+        !g_offsets.task_cred || !g_offsets.task_struct_size ||
+        !g_offsets.cred_uid || !g_offsets.kitimer_node) {
+        fprintf(stderr, "[config] error: profile offsets incomplete (zero field present)\n");
         return -1;
     }
 
@@ -200,11 +241,18 @@ static int parse_blob(const uint8_t *blob, uint32_t length) {
 int kernel_table_load_from_stdin(void) {
     uint8_t len_buf[4];
 
+    /*
+     * Failure semantics: a blob that was SENT but cannot be parsed/validated
+     * is a hard failure (return -1) — the caller must not proceed. The
+     * host-gated built-in fallback is only acceptable when nothing arrived
+     * on stdin at all (e.g. dump-config without input) AND the fallback
+     * release matches the running kernel.
+     */
+
     /* read the 4-byte big-endian length */
     if (fread(len_buf, 1, 4, stdin) != 4) {
-        fprintf(stdout, "[config] warn: no profile received, using built-in fallback table\n");
-        load_builtin_fallback();
-        return 0;
+        fprintf(stdout, "[config] warn: no profile received, trying built-in fallback table\n");
+        return load_fallback_if_host_matches();
     }
     uint32_t length = ((uint32_t)len_buf[0] << 24)
                     | ((uint32_t)len_buf[1] << 16)
@@ -212,36 +260,35 @@ int kernel_table_load_from_stdin(void) {
                     |  (uint32_t)len_buf[3];
 
     if (length == 0 || length > 1024 * 1024) {
-        fprintf(stderr, "[config] error: profile length invalid (%u), using built-in fallback table\n", length);
-        load_builtin_fallback();
-        return 0;
+        fprintf(stderr, "[config] error: profile length invalid (%u)\n", length);
+        return -1;
     }
 
     uint8_t *blob = malloc(length);
     if (!blob) {
-        fprintf(stderr, "[config] error: memory allocation failed, using built-in fallback table\n");
-        load_builtin_fallback();
-        return 0;
+        fprintf(stderr, "[config] error: memory allocation failed\n");
+        return -1;
     }
     if (fread(blob, 1, length, stdin) != length) {
-        fprintf(stderr, "[config] error: profile data incomplete, using built-in fallback table\n");
+        fprintf(stderr, "[config] error: profile data incomplete\n");
         free(blob);
-        load_builtin_fallback();
-        return 0;
+        return -1;
     }
 
     int rc = parse_blob(blob, length);
     free(blob);
     if (rc != 0) {
-        fprintf(stderr, "[config] parse failed, falling back to built-in table\n");
-        load_builtin_fallback();
+        fprintf(stderr, "[config] parse failed, refusing to continue\n");
+        return -1;
     }
     return 0;
 }
 
 const struct kernel_offsets *kernel_table_get(void) {
     if (!g_offsets_loaded) {
-        load_builtin_fallback();
+        /* Unreachable in normal flow: load_from_stdin hard-fails before the
+         * caller dispatches. Kept as a last resort with the host gate. */
+        load_fallback_if_host_matches();
     }
     return &g_offsets;
 }

@@ -1160,9 +1160,12 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
     override fun isShizukuReady(): Boolean = PrivilegeGate.checkService().ok
 
     override fun destroy() {
-        if (!running.get()) {
-            runCatching { exploitProcess?.destroy() }
-            kotlin.system.exitProcess(0)
-        }
+        // Shizuku 已删除 record 并要求本服务自行退出（正常收尾 unbind 也会到达这里）。
+        // 绝不触碰 exploitProcess：native 进程可能仍持有伪造 cred 的钉页，
+        // SIGTERM 会让 pin 塌陷并 panic（见 RC_STEP_TIMEOUT 与 [4] 段注释）。
+        // native 用 --daemon-exit 自行退出，孤儿态由 init 接管（detach 已在
+        // exploit 分支 setsid 完成）。running 状态不参与判断：无论是否在运行，
+        // 本进程都应立即退出，由宿主下次执行重新绑定新实例。
+        kotlin.system.exitProcess(0)
     }
 }
