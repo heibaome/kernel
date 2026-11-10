@@ -29,7 +29,7 @@ class FormatLogUseCase {
 
             tagged.startsWith("result:") -> resultTone(tagged)
             // GhostKey 编排层阶段行：按状态染色，避免全部落 marker '*' 的 Warning 橙
-            gkStage.matches(text.trimEnd('\n')) -> gkStageTone(text)
+            gkStage.matches(text.trimEnd('\n')) -> gkStageTone(text.trimEnd('\n'))
             isWriteRound(message) -> if (marker == '-' || marker == '!') LogTone.Error else LogTone.Progress
             marker == '+' -> LogTone.Success
             marker == '-' || marker == '!' -> LogTone.Error
