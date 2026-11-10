@@ -1455,6 +1455,7 @@ class GhostlockViewModel(
             /* GhostKey boot.img import is single-pick only (onDocumentResult);
              * the multi picker never issues it. */
             DocumentRequest.GhostKeyBootImg -> Unit
+            DocumentRequest.GhostKeyConf -> Unit
         }
     }
 
