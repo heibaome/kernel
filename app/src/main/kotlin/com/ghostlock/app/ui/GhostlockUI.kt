@@ -897,12 +897,22 @@ private fun MainContent(
             )
         }
         item(key = "run") {
+            /* 启用条件必须跟随引擎：GhostKey 设备（GL 不支持、GK IN_RANGE）
+             * 上 GL 的 kernelSupported/executionHasProfile 恒为 false，若不
+             * 分流按钮会永久置灰（onRun 本身已按引擎分流）。 */
+            val runSupported = if (state.engine == ExploitEngine.GHOSTKEY) {
+                (state.ghostKeySupported || state.ghostKeySupportUnknown) &&
+                    state.ghostKeyProfileRelease != null &&
+                    state.shizukuStatus == ShizukuStatus.READY
+            } else {
+                state.kernelSupported &&
+                    state.executionHasProfile &&
+                    (!state.shizukuEnabled ||
+                        state.shizukuStatus == ShizukuStatus.READY)
+            }
             RunButton(
                 running = state.running,
-                supported = state.kernelSupported &&
-                        state.executionHasProfile &&
-                        (!state.shizukuEnabled ||
-                                state.shizukuStatus == ShizukuStatus.READY),
+                supported = runSupported,
                 profileValid = state.profileInvalidPaths.isEmpty(),
                 labelRes = R.string.action_run,
                 onClick = actions::onRun,
