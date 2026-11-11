@@ -115,20 +115,22 @@
 - 中间崩溃（第7次 attempt2、第8次 attempt6 mid-spray）低频偶发，低优先级；
   栽赃页生命周期保护留作候选
 
-## 八、2.0.29→2.0.31：installed 达成，验证对象纠偏
+## 八、2.0.32→2.0.33：触发器证伪，fork 时机成为核心假设
 
-**第10次（2.0.30 fsync 版，日志重启后完整幸存 ✓）**：
-- `[cred] installed at 0x...` **首次达成**（协议时序恢复：reap status=9 路径走通）
-- cred_child 恒 uid=2000（installed 后 log_proc_uid + fixup cycles + ask_child 均如此）
-- log 末尾 attempt 2 截断——偶发崩溃仍在，低优先级
-- **关键疑点**：重定向目标是 g_task（注入进程）的 cred 槽，成功时变 root 的应是
-  注入进程而非 cred_child——验证可能问错了对象
+**第12次（2.0.32，4s armed timer）**：SELinux 到 attempt 9；plant attempt 1/3 完整走通
+仍全 uid=2000 → **"到期 erase 触发重定向"假设证伪**。attempt 2 新路径
+`plant does not fit off=0x1f68`；attempt 4 又 panic（同类 plant 期崩溃）。
 
-**2.0.31（等 CI）**：installed 后自读 `getuid()`（`[cred] self uid=`），双路验证
-（self 或 ask_child 任一 uid=0 即 rooted）。第 11 次判读：
-- `[cred] self uid=0` → **注入进程已是 root** → 后接 rootd fork → ksud 交接 → 终局
-- `[cred] self uid=2000` + `still uid=2000` → 重定向写未生效（task 识别 by_size 或
-  cred 槽位错）→ 深挖 cred_link 机制
+**写零原语实证**：selinux 瓦片 node[0]=0/node[2]=目标 → 内核往目标写零 → enforce=0。
+cred 节点（node[0]=node_kva/node[2]=&cred槽）从未被内核处理过——写零路径
+对它不生效，且若生效会产生 cred=NULL panic（未发生）→ cred 节点根本没进内核处理路径。
+
+**新核心假设（2.0.33）**：设计注释"This task's ->cred points into the reclaimed page"
+= child 的 cred 结构**本来就分配在被回收的定时器页里**（跨缓存回收 + fork 时机），
+无需任何指针重定向——伪造内容写入该页即 root。移植缺陷：cred_child 在所有 cycle
+之前 fork（leak_task L2012），其 cred 永远在普通 cred_jar 页 → 前提从不成立。
+修复方向：cred_child 的 fork 移到首个 victim 页释放后的时机窗（待设计：
+需确认 cred_jar 从 buddy 取页的时序、g_cred_kva 与 child cred 地址的重合机制）。
 
 ## 九、GK 日志链路速查（2.0.23+）
 
