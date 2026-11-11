@@ -1215,10 +1215,12 @@ class GhostlockViewModel(
         }
     }
 
-    /** 经 Shizuku（shell 身份）下发重启。 */
+    /** 经 Shizuku（shell 身份）下发重启。newProcess 在 API 13.1.5 是 private，
+     * 走公开的 IShizukuService 接口。 */
     private fun requestReboot() {
         runCatching {
-            Shizuku.newProcess(arrayOf("svc", "power", "reboot"), null, null)
+            val service = moe.shizuku.server.IShizukuService.Stub.asInterface(Shizuku.getBinder())
+            service.newProcess(arrayOf("svc", "power", "reboot"), null, null)
         }.onSuccess {
             appendLog("reboot command issued via Shizuku shell")
             send(GhostlockEffect.Toast(R.string.dirty_recovery_rebooting))
@@ -2030,6 +2032,8 @@ class GhostlockViewModel(
             }
 
             is PendingConfirmation.GhostKeyStart -> runGhostKey()
+
+            is PendingConfirmation.DirtyRecovery -> requestReboot()
         }
     }
 
