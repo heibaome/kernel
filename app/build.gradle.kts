@@ -25,6 +25,11 @@ val gitVersionCode = runCatching {
     1
 }
 
+// 2026-11-11 IDE 同步把 main 历史孤儿化为单个备份提交，rev-count 回退到 1，
+// 低于已装版本会导致覆盖安装被拒。设定单调下限（旧链提交数远小于此）。
+const val VERSION_CODE_FLOOR = 500
+val versionCodeResolved = maxOf(gitVersionCode, VERSION_CODE_FLOOR)
+
 val buildInfoSrc = layout.buildDirectory.dir("generated/source/buildInfo")
 
 val generateBuildInfo = tasks.register("generateBuildInfo") {
@@ -67,7 +72,7 @@ android {
         applicationId = "com.kernel.ghostsuite"
         minSdk = 31
         targetSdk = 37
-        versionCode = gitVersionCode
+        versionCode = versionCodeResolved
         versionName = appVersionName
     }
     androidResources {
