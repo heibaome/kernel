@@ -17,8 +17,12 @@
 
 - 一加 Ace 5（PKG110），12GB，骁龙 8 Gen 3，8 核
 - 内核 `6.1.157-android14-11-o-g7cdd565ce1ed`（**VA39 已实证**：`_text - slide = 0xFFFFFFC080000000`）
-- KernelSU 已 root + Shizuku uid=2000
-- 本地仓库：`/workspace`，分支 `main`（2.0.24 = 7b04ea5 已推送，CI 监听中）
+- **KernelSU 管理器 App 已安装，但设备未 root**（GK 提权从未成功，4 次运行全 panic；
+  用户明确纠正过——勿再写"已 root"）；Shizuku uid=2000 shell 会话
+- pstore 取证在无 root 时不可读（0400 + SELinux 拒 shell；user 构建 bugreport 也不含）。
+  唯一路径 = 某次运行成功 → rootd 临时 root 窗口内快照（2.0.25 候选功能）。
+  panic 现场留在 RAM 里不会被清除，但会被下一次 panic 覆盖
+- 本地仓库：`/workspace`，分支 `main`（2.0.24 = 946ce4d 已发布 CI 全绿）
 - ⚠️ `trae/agent-vc0XOI` 分支被用户 IDE 同步反复重置（"feat: update workspace" 系列，
   8dc8a47 时其 build.gradle.kts 是 "1.2" 且缺 UserService v3/managerPackage），与 main
   分叉，**不要在上面工作**；工作区可能随时被同步切回该分支——动手前先
@@ -93,13 +97,12 @@
 ## 七、下一步（等第 5 次实测）
 
 1. 用户装 2.0.24（先删旧 profile 再重导 boot.img），冷机、单 route、干净启动
-2. panic 则取 `/sys/fs/pstore/console-ramoops-0`，看 `pc :` 落点：
-   - posix timer / itimer 路径 → 证实假设 A → 修复 = 压缩空窗
-     （轮询 200ms→50ms / 预铺 pattern / fast 档放宽）
-   - cred/selinux 写路径 → W1/W2 写竞争
+2. **设备未 root，pstore 取不了**（见第二节）——内核级证据留待 2.0.25
+   "成功运行后自动快照 pstore" 功能；本轮裁决材料只有 GK 日志 + profile.conf
 3. 观察新日志三处：`page_freed`/`writes=` 是否出现；mlockall 是否仍 ENOMEM；
    arming 是 direct 还是 trigger
-4. 2.0.25 候选：空窗压缩、mlockall（root child 后再锁/预 raise limit）、arming 确定性
+4. 2.0.25 候选（按证据取舍）：空窗压缩（轮询 200ms→50ms / 预铺 pattern / fast 档放宽）、
+   mlockall（root child 后再锁/预 raise limit）、arming 确定性、**pstore 自动快照**
 
 ## 八、GK 日志链路速查（2.0.23+）
 
