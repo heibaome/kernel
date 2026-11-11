@@ -3,7 +3,8 @@ package com.GhostKey.app.data
 import android.content.Context
 import java.io.BufferedWriter
 import java.io.File
-import java.io.FileWriter
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -274,18 +275,24 @@ class RunLogStore(private val dir: File) {
         return out
     }
 
-    /** 一次运行的写入会话。追加即落盘（每行 flush），进程被杀也只丢最后半行。 */
+    /** 一次运行的写入会话。追加即落盘（每行 flush + 定期 fsync），panic 重启最多丢最后几行。 */
     inner class Session internal constructor(
         private val file: File,
         private val runId: Int,
         private val startedAt: Long,
     ) {
         private var writer: BufferedWriter? = null
+        private var fd: java.io.FileDescriptor? = null
         private var lineCount = 0
+        private var sinceSync = 0
         private var finished = false
 
         internal fun writeHeader(device: String, kernel: String, profile: String) {
-            writer = runCatching { BufferedWriter(FileWriter(file, true)) }.getOrNull()
+            // 2.0.30：FileWriter 只有 JVM flush（推到页缓存），panic 会吞掉最近写入——
+            // 第 9 次实测整份日志消失即此因。改用 FileOutputStream 保留 fd 做定期 fsync。
+            val fos = runCatching { FileOutputStream(file, true) }.getOrNull()
+            writer = fos?.let { runCatching { BufferedWriter(OutputStreamWriter(it)) }.getOrNull() }
+            fd = fos?.fd
             val w = writer ?: return
             runCatching {
                 w.write(K_RUN + runId); w.newLine()
@@ -295,6 +302,7 @@ class RunLogStore(private val dir: File) {
                 if (profile.isNotBlank()) { w.write(K_PROFILE + profile); w.newLine() }
                 w.write(BODY_BEGIN); w.newLine()
                 w.flush()
+                runCatching { fd?.sync() }
             }
         }
 
@@ -307,6 +315,10 @@ class RunLogStore(private val dir: File) {
                     w.newLine()
                     w.flush()
                     lineCount++
+                    if (++sinceSync >= 8) {
+                        sinceSync = 0
+                        runCatching { fd?.sync() }
+                    }
                 }
             }
         }
