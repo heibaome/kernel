@@ -115,14 +115,20 @@
 - 中间崩溃（第7次 attempt2、第8次 attempt6 mid-spray）低频偶发，低优先级；
   栽赃页生命周期保护留作候选
 
-## 八、2.0.29（50b0b95，等 CI）：恢复协议时序
+## 八、2.0.29→2.0.31：installed 达成，验证对象纠偏
 
-`--exec-ok` 睡 1.5s 再自退——SIGKILL 在 200ms 落到已完成 execve 的活进程上
-（干净击杀，不复现第6次 mid-exec panic）→ reap status=9 → installed →
-ask_child → rooted。第 9 次判读：
-- `[cred] installed` + `[cred] answer uid=0` = **提权成功**（后接 rootd→ksud 交接）
-- `[cred] still uid=2000` = cred 槽位重定向未生效（查 node[2]=target 链路）
-- mid-spray 崩再现 = 查喷洒页生命周期
+**第10次（2.0.30 fsync 版，日志重启后完整幸存 ✓）**：
+- `[cred] installed at 0x...` **首次达成**（协议时序恢复：reap status=9 路径走通）
+- cred_child 恒 uid=2000（installed 后 log_proc_uid + fixup cycles + ask_child 均如此）
+- log 末尾 attempt 2 截断——偶发崩溃仍在，低优先级
+- **关键疑点**：重定向目标是 g_task（注入进程）的 cred 槽，成功时变 root 的应是
+  注入进程而非 cred_child——验证可能问错了对象
+
+**2.0.31（等 CI）**：installed 后自读 `getuid()`（`[cred] self uid=`），双路验证
+（self 或 ask_child 任一 uid=0 即 rooted）。第 11 次判读：
+- `[cred] self uid=0` → **注入进程已是 root** → 后接 rootd fork → ksud 交接 → 终局
+- `[cred] self uid=2000` + `still uid=2000` → 重定向写未生效（task 识别 by_size 或
+  cred 槽位错）→ 深挖 cred_link 机制
 
 ## 九、GK 日志链路速查（2.0.23+）
 
