@@ -73,9 +73,14 @@ int main(int argc, char **argv) {
     const char *command = argv[1];
 
     /* uaf_plant bootstrap path: execve("/proc/self/exe", {"uaf_plant","--exec-ok"})
-     * -- must match the top-of-main() behavior of the reference uaf_plant.c: exit immediately. */
-    if (!strcmp(command, "--exec-ok"))
+     * -- must match the top-of-main() behavior of the reference uaf_plant.c: exit immediately.
+     * 2.0.26 诊断：入口打印身份，用于区分"崩在 execve 内"与"execve 已完成"。
+     * 日志 fd 跨 execve 保留，这里能写进同一份 run-*.log。 */
+    if (!strcmp(command, "--exec-ok")) {
+        dprintf(STDOUT_FILENO, "[eok] entered uid=%d euid=%d\n",
+            (int)getuid(), (int)geteuid());
         _exit(0);
+    }
 
     argc -= 1;
     argv += 1;

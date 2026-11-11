@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -817,9 +818,11 @@ static int killer_fn(void *arg)
 		if (atomic_load_explicit(&g_stop, memory_order_acquire))
 			return 0;
 	}
+	/* 2.0.26 诊断：拆分打印，定位崩溃落在"等 old 消失"还是"对 leader 发 SIGKILL"内 */
+	dprintf(STDOUT_FILENO, "[killer] old=%d gone\n", old);
 	syscall(SYS_tgkill, tgid, tgid, SIGKILL);
-	dprintf(STDOUT_FILENO, "[killer] SIGKILL tgid=%d old=%d errno=%d\n",
-		tgid, old, errno);
+	dprintf(STDOUT_FILENO, "[killer] sigkill sent tgid=%d errno=%d\n",
+		tgid, errno);
 	return 0;
 }
 
@@ -876,6 +879,8 @@ static void *exec_fn(void *arg)
 	}
 	dprintf(STDOUT_FILENO, "[exec_body] begin tid=%ld\n", (long)syscall(SYS_gettid));
 	execve("/proc/self/exe", argv, NULL);
+	/* 2.0.26 诊断：execve 正常不返回；走到这里说明 execve 系统调用失败而非 panic */
+	dprintf(STDOUT_FILENO, "[exec_body] execve errno=%d\n", errno);
 	_exit(122);
 }
 
@@ -1725,8 +1730,13 @@ static void cred_child(void)
 	 * (that is exactly the "[cred] installed" followed by "Uid: 2000" symptom).
 	 * MCL_FUTURE keeps pages allocated later (fork, heap growth) locked too.
 	 */
-	if (mlockall(MCL_CURRENT | MCL_FUTURE))
-		dprintf(STDOUT_FILENO, "[child-cred] warn: mlockall errno=%d\n", errno);
+	if (mlockall(MCL_CURRENT | MCL_FUTURE)) {
+		/* 2.0.26 诊断：附上 RLIMIT_MEMLOCK，确认是限额问题而非 VMA 冲突 */
+		struct rlimit rl;
+		getrlimit(RLIMIT_MEMLOCK, &rl);
+		dprintf(STDOUT_FILENO, "[child-cred] warn: mlockall errno=%d rlim=%lu/%lu\n",
+			errno, (unsigned long)rl.rlim_cur, (unsigned long)rl.rlim_max);
+	}
 	for (;;) {
 		unsigned uid, euid, gid, egid;
 		unsigned char go;
