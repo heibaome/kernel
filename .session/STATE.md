@@ -28,6 +28,10 @@
   分叉，**不要在上面工作**；工作区可能随时被同步切回该分支——动手前先
   `git branch --show-current`，发现被切走：`git diff` 备份 patch → stash -u → checkout main
   → 只重放两分支一致的文件，分叉文件手工重放编辑
+- ⚠️ 2026-11-11 IDE 同步事故：main 历史被"pre-termination backup"孤儿化为单提交
+  （811d366），**树内容完整**（含执行门/复制按钮/2.0.25）。后果：versionCode 回退
+  （已加 floor=500 修复）、git 身份丢失（提交需 GIT_AUTHOR/COMMITTER env）、
+  工作区曾被切回 trae/agent-vc0XOI（已切回 main）
 - ⚠️ gh CLI 凭据会丢；用 `git credential fill` 拿 token 调 GitHub API
 - ⚠️ IDE 同步会删除未跟踪文件（`.session/` 被删过一次）
 - GK 内置资产在 `ghostkey/src/main/assets/ghostkey_kernel_profiles/`（13 机型 + index.conf），
@@ -94,17 +98,27 @@
   1. `Download/ghostlock-debug-log/<时间>/profile.conf`（第3/4/5次）直接验尸
   2. 用 2.0.24 重导 boot-ace5-trimmed.img 对比（新版写入 schema_version=2）
 
-## 七、下一步（等第 5 次实测）
+## 七、第 5 次实测结论（2.0.25，2026-11-11 12:30，日志已存 .uploads/实测.log）
 
-1. 用户装 2.0.24（先删旧 profile 再重导 boot.img），冷机、单 route、干净启动
-2. **设备未 root，pstore 取不了**（见第二节）——内核级证据留待 2.0.25
-   "成功运行后自动快照 pstore" 功能；本轮裁决材料只有 GK 日志 + profile.conf
-3. 观察新日志三处：`page_freed`/`writes=` 是否出现；mlockall 是否仍 ENOMEM；
-   arming 是 direct 还是 trigger
-4. 2.0.25 候选（按证据取舍）：空窗压缩（轮询 200ms→50ms / 预铺 pattern / fast 档放宽）、
-   mlockall（root child 后再锁/预 raise limit）、arming 确定性、**pstore 自动快照**
+- **假设 B（profile 污染）排除**：本次跑的用户 profile 通过了 2.0.25 执行门
+  （admissible = schema_version=2 + 值域全过；resolve() 按 admissible 过滤已验证接线正确），
+  BTF 修复后的干净档依旧 panic
+- **panic 点与第 4 次完全一致**：`[killer] SIGKILL old=16177 errno=3` 为最后一行，
+  崩在 killer→exec-ok 毫秒级窗口内
+- **stream_backfill 首次产出证据**：`pairs=4 node_base=0x890820 off=0xde0`
+  （第 4 次缺的 page_freed 类证据这次拿到；第 4 次是 2.0.22 日志乱序丢行所致）
+- mlockall errno=12 仍在；arming=trigger 仍在；日志链路（2.0.23 修复）完全健康
+- run1（12:30:26）在 calib_b order1_pfns=126 后被中断重跑，与 panic 无关
 
-## 八、GK 日志链路速查（2.0.23+）
+## 八、下一步（2.0.26 计划，按优先级）
+
+1. **崩溃窗口细粒度日志**：killer 之后 / waitpid / exec-ok 各步间加 `[exec_body]` 打印，
+   下次 panic 的最后一行直接指认崩前最后一个内核操作
+2. **mlockall 修复**：rootd/root child 侧再锁，或改走 /proc/pid/mem 直写避免依赖子进程页锁定
+3. **arming direct 修复**：`armed=trigger enable=?` 查 enable 写失败原因（SELinux？）
+4. pstore 自动快照（成功运行后取证上一次 panic）保持候选
+
+## 九、GK 日志链路速查（2.0.23+）
 
 native stdout（`[stage] …` 行 + `\x1eC98260_STATUS` 控制行）→ relayLog（tail 日志文件，
 按 `\n` 切行，UTF-8，**丢 STATUS 行**）→ Bridge（onProgress → `[*] stage n/5 name: status`，
@@ -112,7 +126,7 @@ onLog 直传）→ 双写：执行 sheet（FormatLogUseCase 染色）+ `RunLogSt
 （历史面板读它）。染色规则：stage ok 绿/failed 红/degraded 黄/running 蓝，
 error 关键词红、`warn:` 黄、其余灰；`<s>/<b>/<->/<k>` 沿用 GL 语义。
 
-## 九、竞品情报（2026-11-11 查证）
+## 十、竞品情报（2026-11-11 查证）
 
 - 月虹提权助手（yhyun.asia，闭源，QQ/网盘分发）：按机型打包提权 payload + KernelSU
   一键化，ColorOS 17 / OnePlus 13 生态已跑通（DroidWin 提及 Rootline）；公开 PoC 家族
