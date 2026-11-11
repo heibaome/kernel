@@ -5,6 +5,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghostlock.app.R
+import rikka.shizuku.Shizuku
 import com.ghostlock.app.domain.model.CloudProfileUpdateResult
 import com.ghostlock.app.domain.model.CpuPair
 import com.ghostlock.app.domain.model.KernelSnapshot
@@ -1189,10 +1190,41 @@ class GhostlockViewModel(
                 val code = runExploitUseCase(pair, useShizuku, ::appendLog)
                 appendLog(if (code == 0) "result: exploit completed" else "result: exploit failed (exit code=$code)")
                 appendLog("exit code=$code")
+                maybeOfferDirtyRecovery(code)
             } finally {
                 endOperation()
                 send(GhostlockEffect.KeepScreenAwake(false))
             }
+        }
+    }
+
+    /**
+     * 2.0.33 脏状态恢复：exit 8（残留进程钉住页）/ 9（SELinux Permissive）都意味着
+     * 内核残留只有完整重启可清。弹恢复卡，用户确认后经 Shizuku 重启。
+     */
+    private fun maybeOfferDirtyRecovery(code: Int) {
+        if (code != 8 && code != 9) return
+        pendingConfirmation = PendingConfirmation.DirtyRecovery
+        mutableState.update {
+            it.copy(
+                dialogVisible = true,
+                dialogType = DialogType.CONFIRM,
+                dialogTitleRes = R.string.dirty_recovery_title,
+                dialogMessageRes = R.string.dirty_recovery_body,
+            )
+        }
+    }
+
+    /** 经 Shizuku（shell 身份）下发重启。 */
+    private fun requestReboot() {
+        runCatching {
+            Shizuku.newProcess(arrayOf("svc", "power", "reboot"), null, null)
+        }.onSuccess {
+            appendLog("reboot command issued via Shizuku shell")
+            send(GhostlockEffect.Toast(R.string.dirty_recovery_rebooting))
+        }.onFailure {
+            appendLog("<s> error: reboot failed: ${it.message}")
+            send(GhostlockEffect.Toast(R.string.dirty_recovery_reboot_failed))
         }
     }
 
@@ -1242,6 +1274,7 @@ class GhostlockViewModel(
                 )
                 appendLog(if (code == 0) "result: exploit completed" else "result: exploit failed (exit code=$code)")
                 appendLog("exit code=$code")
+                maybeOfferDirtyRecovery(code)
             } finally {
                 endOperation()
                 send(GhostlockEffect.KeepScreenAwake(false))
@@ -1556,6 +1589,10 @@ class GhostlockViewModel(
                 is PendingConfirmation.GhostKeyStart -> {
                     pendingConfirmation = null
                     runGhostKey()
+                }
+                is PendingConfirmation.DirtyRecovery -> {
+                    pendingConfirmation = null
+                    requestReboot()
                 }
                 else -> toggleShizuku(true)
             }
@@ -2106,6 +2143,9 @@ class GhostlockViewModel(
     private sealed interface PendingConfirmation {
         /** GhostKey 引擎执行前的合并安全确认。 */
         data object GhostKeyStart : PendingConfirmation
+
+        /** 脏状态恢复：用户确认后经 Shizuku 重启设备（fake cred / 钉住页仅重启可清）。 */
+        data object DirtyRecovery : PendingConfirmation
 
         data class Import(val documents: Map<String, String>) : PendingConfirmation
         data class Parse(

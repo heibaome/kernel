@@ -150,6 +150,11 @@
     <string name="gk_run_history_entry">Ver logs de execução salvos</string>
     <string name="gk_run_history_back">Voltar à lista de execuções</string>
     <string name="gk_run_history_empty">Nenhum log de execução salvo</string>
+    <string name="dirty_recovery_title">Estado sujo detectado</string>
+    <string name="dirty_recovery_body">A execução anterior que falhou deixou resíduos no kernel (SELinux Permissivo / páginas fixadas). Esses resíduos só podem ser removidos com uma reinicialização completa — executar novamente sem isso não terá sucesso. Reiniciar agora?</string>
+    <string name="dirty_recovery_reboot">Reiniciar agora</string>
+    <string name="dirty_recovery_rebooting">Reiniciando via Shizuku…</string>
+    <string name="dirty_recovery_reboot_failed">Falha ao reiniciar. Reinicie manualmente.</string>
 <string name="import_missing_includes">Arquivos de inclusão ausentes; selecione-os junto com o perfil e tente novamente</string>
 <string name="import_no_match">Importado, mas seu lançamento não corresponde a este kernel e não será aplicado</string>
 <string name="import_result_title">Resultado da importação</string>

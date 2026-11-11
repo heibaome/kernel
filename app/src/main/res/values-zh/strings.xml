@@ -37,6 +37,11 @@
     <string name="gk_run_history_entry">查看历史运行日志</string>
     <string name="gk_run_history_back">返回运行列表</string>
     <string name="gk_run_history_empty">暂无历史运行日志</string>
+    <string name="dirty_recovery_title">检测到脏状态</string>
+    <string name="dirty_recovery_body">上一轮失败的运行留下了内核残留（SELinux Permissive / 被钉住的页）。这些残留只有完整重启才能清除，不重启继续运行不会成功。现在重启吗？</string>
+    <string name="dirty_recovery_reboot">立即重启</string>
+    <string name="dirty_recovery_rebooting">正在通过 Shizuku 重启…</string>
+    <string name="dirty_recovery_reboot_failed">重启失败，请手动重启。</string>
     <string name="import_missing_includes">缺少 include 依赖文件，请将依赖文件与配置一并选中后重试</string>
     <string name="offsets_already_exist">偏移已存在（内置）</string>
     <string name="overwrite_title">已存在偏移数据</string>

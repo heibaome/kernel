@@ -142,6 +142,39 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
 
         try {
             //
+            // 2.0.33 运行前脏状态预检：SELinux Permissive = 上一轮失败残留
+            // （假 cred、被钉住的页），除完整重启外无法清除。先尝试自动恢复
+            // （shell 写回 Enforcing，多数内核策略会拒绝），失败则以 exit=9 终止，
+            // 由 app 侧弹出恢复卡（含一键重启）。
+            //
+            val enforce = runCatching {
+                File("/sys/fs/selinux/enforce").readText().trim()
+            }.getOrNull()
+            if (enforce == "0") {
+                val restored = runCatching {
+                    Runtime.getRuntime()
+                        .exec(arrayOf("sh", "-c", "echo 1 > /sys/fs/selinux/enforce"))
+                        .waitFor() == 0 &&
+                        File("/sys/fs/selinux/enforce").readText().trim() == "1"
+                }.getOrDefault(false)
+                if (restored) {
+                    callback?.onLog(
+                        "<b> dirty state detected: SELinux was Permissive; " +
+                            "auto-restored to Enforcing",
+                    )
+                } else {
+                    callback?.onLog(
+                        "<s> error: dirty state: SELinux is Permissive " +
+                            "(residue of a previous failed run)",
+                    )
+                    callback?.onLog(
+                        "<s> error: fake creds and pinned pages survive until a full reboot",
+                    )
+                    callback?.onLog("<s> auto-recovery requires reboot (exit=9)")
+                    return 9
+                }
+            }
+            //
             //
             //
             //
