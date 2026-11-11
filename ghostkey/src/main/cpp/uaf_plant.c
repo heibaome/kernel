@@ -820,6 +820,17 @@ static int killer_fn(void *arg)
 	}
 	/* 2.0.26 诊断：拆分打印，定位崩溃落在"等 old 消失"还是"对 leader 发 SIGKILL"内 */
 	dprintf(STDOUT_FILENO, "[killer] old=%d gone\n", old);
+	/*
+	 * 2.0.27：第 6 次实测证明紧跟 old-gone 的 SIGKILL 会跑赢刚 exec 的新镜像——
+	 * 任务在 exec 收尾/入口处被杀，exit 路径清扫 2048 个 k_itimer 导致栽赃页
+	 * 被内核释放（page_freed=1），随后 exec/cred 路径触碰已释放页 → panic。
+	 * 给新镜像 200ms 让其 _exit(0) 自然退出；SIGKILL 仅作兜底（execve 失败
+	 * 时 _exit(122) 同样先退，SIGKILL 落空为 ESRCH，无害）。
+	 */
+	{
+		struct timespec grace = { .tv_nsec = 200000000 };
+		nanosleep(&grace, NULL);
+	}
 	syscall(SYS_tgkill, tgid, tgid, SIGKILL);
 	dprintf(STDOUT_FILENO, "[killer] sigkill sent tgid=%d errno=%d\n",
 		tgid, errno);
