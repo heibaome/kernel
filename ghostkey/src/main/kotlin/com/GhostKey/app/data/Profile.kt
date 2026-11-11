@@ -58,14 +58,86 @@ data class ProfileDocument(
         return missing
     }
 
-    /** 是否完整（所有必填字段齐备）。 */
-    fun isComplete(): Boolean = missingRequiredFields().isEmpty()
+    /**
+     * 值域校验（只检查**已提供**的值，缺失字段交给 [missingRequiredFields]）。
+     *
+     * 背景：2.0.15–2.0.18 的 BTF 解析错位会把垃圾偏移写进导入的 profile
+     * （成员缺失时曾写 0，错位时写相邻成员的偏移），而旧校验只判键存在，
+     * 污染值会畅通无阻地进内核写路径。规则与 native 默认值表
+     * （kernel_table.c offsets_default）对齐，全部在 Long 域判定，
+     * 先于 toKernelProfile 的 u32 截断——`0x1_0000_0208.toInt()` 这类
+     * 静默截断值在这里就会被上界拦下。
+     */
+    fun validationErrors(): List<String> {
+        val errors = mutableListOf<String>()
 
-    /** 转 KernelProfile；缺字段抛 [ProfileConversionException]。 */
+        /** 双路径取值：v2 嵌套（offset.xxx）优先，回退扁平键（legacy）。 */
+        fun num(name: String): Long? = getLong("offset.$name") ?: getLong(name)
+        fun hex(v: Long): String = "0x${v.toString(16)}"
+
+        for (p in SYMBOL_ADDRESS_FIELDS) {
+            val v = getLong(p) ?: continue
+            if (v < SYMBOL_ADDRESS_MIN) errors += "$p=${hex(v)}: 符号地址不在内核地址空间"
+        }
+
+        num("task_struct_size")?.let { v ->
+            if (v < TASK_STRUCT_SIZE_MIN || v > TASK_STRUCT_SIZE_MAX) {
+                errors += "task_struct_size=${hex(v)}: 超出合理范围"
+            }
+        }
+        num("task_cred")?.let { v ->
+            val size = num("task_struct_size")
+            when {
+                v <= 0 -> errors += "task_cred=${hex(v)}: 偏移为 0（BTF 错位典型产物）"
+                v > TASK_STRUCT_SIZE_MAX -> errors += "task_cred=${hex(v)}: 超出合理范围"
+                size != null && size > 0 && v >= size ->
+                    errors += "task_cred=${hex(v)}: 不小于 task_struct_size=${hex(size)}"
+            }
+        }
+        num("cred_uid")?.let { v ->
+            if (v <= 0 || v >= CRED_MEMBER_MAX) errors += "cred_uid=${hex(v)}: 超出合理范围"
+        }
+        val kitimerSize = num("kitimer_size") ?: KITIMER_SIZE_DEFAULT
+        num("kitimer_size")?.let { v ->
+            if (v < KITIMER_SIZE_MIN || v > KITIMER_SIZE_MAX) {
+                errors += "kitimer_size=${hex(v)}: 超出合理范围"
+            }
+        }
+        num("kitimer_node")?.let { v ->
+            when {
+                v <= 0 -> errors += "kitimer_node=${hex(v)}: 偏移为 0（BTF 错位典型产物）"
+                v >= kitimerSize -> errors += "kitimer_node=${hex(v)}: 不小于 kitimer_size=${hex(kitimerSize)}"
+            }
+        }
+        num("cred_size")?.let { v ->
+            if (v < CRED_SIZE_MIN || v > CRED_MEMBER_MAX) errors += "cred_size=${hex(v)}: 超出合理范围"
+        }
+        for (p in CRED_MEMBER_FIELDS) {
+            val v = num(p) ?: continue
+            if (v <= 0 || v >= CRED_MEMBER_MAX) errors += "$p=${hex(v)}: 超出合理范围"
+        }
+        num("task_alloc_link")?.let { v ->
+            if (v > 0 && v < SYMBOL_ADDRESS_MIN) {
+                errors += "task_alloc_link=${hex(v)}: 符号地址不在内核地址空间"
+            }
+        }
+        return errors
+    }
+
+    /** 是否完整（必填齐备且值域合法）。 */
+    fun isComplete(): Boolean =
+        missingRequiredFields().isEmpty() && validationErrors().isEmpty()
+
+    /** 转 KernelProfile；缺字段或值域非法抛 [ProfileConversionException]。 */
     fun toKernelProfile(): KernelProfile {
         val missing = missingRequiredFields()
-        if (missing.isNotEmpty()) {
-            throw ProfileConversionException("缺少必填字段: ${missing.joinToString()}")
+        val invalid = validationErrors()
+        if (missing.isNotEmpty() || invalid.isNotEmpty()) {
+            val parts = buildList {
+                if (missing.isNotEmpty()) add("缺少必填字段: ${missing.joinToString()}")
+                invalid.take(8).forEach { add(it) }
+            }
+            throw ProfileConversionException(parts.joinToString("; "))
         }
         return KernelProfile(
             release = release,
@@ -103,6 +175,38 @@ data class ProfileDocument(
     fun toHocon(): String = HoconSupport.render(fields)
 
     companion object {
+        /**
+         * 当前 profile 文档格式版本（schema_version）。
+         * 2 = v2 点分路径布局 + 值域校验时代；缺失或低于 2 的用户导入 profile
+         * 一律视为旧版生成（可能含 BTF 错位污染偏移），执行门拒绝并要求重导。
+         */
+        const val SCHEMA_VERSION_CURRENT = 2
+
+        /** 内核符号地址下界（arm64 TTBR1 半空间 0xFFFF 开头）。 */
+        private val SYMBOL_ADDRESS_MIN: Long = 0xFFFF000000000000UL.toLong()
+
+        /** 符号地址类字段（link-time 内核 VA 或线性映射差值）。 */
+        private val SYMBOL_ADDRESS_FIELDS = listOf(
+            "page_offset",
+            "offset.timer_link", "offset.cred_link", "offset.selinux_link",
+            "offset.user_ns", "offset.root_user", "offset.groups", "offset.ucounts",
+        )
+
+        private const val TASK_STRUCT_SIZE_MIN = 0x800L
+        private const val TASK_STRUCT_SIZE_MAX = 0x8000L
+        private const val CRED_MEMBER_MAX = 0x400L
+        private const val CRED_SIZE_MIN = 0x40L
+        private const val KITIMER_SIZE_MIN = 0x80L
+        private const val KITIMER_SIZE_MAX = 0x400L
+        private const val KITIMER_SIZE_DEFAULT = 0x108L
+
+        /** cred 成员偏移类字段（有 Kotlin 默认值兜底，提供时才校验）。 */
+        private val CRED_MEMBER_FIELDS = listOf(
+            "cred_cap_inheritable", "cred_cap_permitted", "cred_cap_effective",
+            "cred_cap_bset", "cred_cap_ambient",
+            "cred_security", "cred_user", "cred_user_ns", "cred_ucounts", "cred_groups",
+        )
+
         /** 必填的数值/字符串字段（vuln_type、recommend_shizuku 有默认值，不在此列）。 */
         private val REQUIRED_NUMERIC = listOf(
             "page_offset",
@@ -116,7 +220,8 @@ data class ProfileDocument(
             val root = HoconSupport.parseObject(text, includer)
             val release = (root["release"] as? String)?.takeIf { it.isNotBlank() }
                 ?: throw ProfileConversionException("缺少 release 字段")
-            return ProfileDocument(release = release, fields = root)
+            val schemaVersion = coerceLong(root["schema_version"])?.toInt() ?: 0
+            return ProfileDocument(release = release, schemaVersion = schemaVersion, fields = root)
         }
 
         /** 从既有 KernelProfile 反向构造 ProfileDocument（用于导出/编辑）。 */
@@ -149,12 +254,17 @@ data class ProfileDocument(
             )
             val fields = linkedMapOf<String, Any?>(
                 "release" to kp.release,
+                "schema_version" to SCHEMA_VERSION_CURRENT,
                 "vuln_type" to kp.vulnType,
                 "recommend_shizuku" to if (kp.recommendShizuku) 1 else 0,
                 "page_offset" to kp.pageOffset,
                 "offset" to offset,
             )
-            return ProfileDocument(release = kp.release, fields = fields)
+            return ProfileDocument(
+                release = kp.release,
+                schemaVersion = SCHEMA_VERSION_CURRENT,
+                fields = fields,
+            )
         }
     }
 }

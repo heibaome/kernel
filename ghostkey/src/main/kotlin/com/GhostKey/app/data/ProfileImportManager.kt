@@ -33,7 +33,15 @@ class ProfileImportManager(private val store: UserProfileStore) {
             if (release == null) {
                 return ImportOutcome.Err("缺少 release 字段（v1 旧格式请使用 kernel_release）")
             }
-            val doc = ProfileDocument(release = release, fields = canonical)
+            // 新版导入统一写入 schema_version：执行门据此放行；旧版生成的
+            // profile 无此键，会被拒绝并要求重导（修复不追溯旧档）。
+            val stamped = LinkedHashMap(canonical)
+            stamped["schema_version"] = ProfileDocument.SCHEMA_VERSION_CURRENT
+            val doc = ProfileDocument(
+                release = release,
+                schemaVersion = ProfileDocument.SCHEMA_VERSION_CURRENT,
+                fields = stamped,
+            )
             val saved = store.save(store.documentFileName(release), doc.toHocon())
             ImportOutcome.Ok(saved.name, doc)
         } catch (e: Exception) {
@@ -45,7 +53,11 @@ class ProfileImportManager(private val store: UserProfileStore) {
     fun importImg(imageFileName: String, bytes: ByteArray): ImportOutcome {
         return try {
             val info = BootImageParser().parse(bytes)
-            val (doc, _) = ImgToProfile.toProfileDocument(info, imageFileName)
+            val (raw, _) = ImgToProfile.toProfileDocument(info, imageFileName)
+            val doc = raw.copy(
+                schemaVersion = ProfileDocument.SCHEMA_VERSION_CURRENT,
+                fields = raw.fields + ("schema_version" to ProfileDocument.SCHEMA_VERSION_CURRENT),
+            )
             val name = store.documentFileName(doc.release)
             store.save(name, doc.toHocon())
             ImportOutcome.Ok(name, doc)

@@ -15,6 +15,20 @@ data class StoredProfile(
     val missing: List<String> get() = document.missingRequiredFields()
     /** 来源标签（IMG 导入会写 _source）。 */
     val source: String? get() = document.getString("_source")
+
+    /** 文档自带 schema_version（旧版导入无此键 → 0）。 */
+    val schemaVersion: Int get() = document.schemaVersion
+    /** 值域非法的字段列表。 */
+    val validationErrors: List<String> get() = document.validationErrors()
+
+    /**
+     * 可被执行门接纳：schema_version 达到当前版本且值域合法。
+     * 旧版（BTF 错位时代）导入的 profile 无版本戳，一律拒绝——
+     * 修复只保证「以后导入的是对的」，不保证「以前的变对了」。
+     */
+    val admissible: Boolean
+        get() = document.schemaVersion >= ProfileDocument.SCHEMA_VERSION_CURRENT &&
+            document.validationErrors().isEmpty()
 }
 
 /**

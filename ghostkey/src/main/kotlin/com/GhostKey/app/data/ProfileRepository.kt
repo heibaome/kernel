@@ -33,10 +33,14 @@ class ProfileRepository(context: Context) {
      * 不再按 KMI 前缀回退——同 KMI 不同构建的内核符号偏移并不一致，
      * 回退会把其它机型的 timer_link / cred_link 套过来，引发 KASLR 解算失败
      * （日志中 exit=2）。无精确匹配时返回 null，由调用方提示用户导入对应 boot.img。
+     *
+     * 执行门：旧版（无 schema_version 或版本过低）或值域非法的用户 profile
+     * 不参与用户层优先——否则会遮蔽同 release 的内置 profile；无内置时由
+     * 调用方根据 [UserProfileStore] 的存储态给出「重新导入」指引。
      */
     fun resolve(release: String): KernelProfile? {
         val user = store.listComplete()
-        user.firstOrNull { it.release == release }?.let { return it }
+        user.firstOrNull { it.release == release && it.admissible }?.let { return it }
         builtin.match(release)?.let { return it }
         return null
     }
