@@ -132,6 +132,27 @@ cred 节点（node[0]=node_kva/node[2]=&cred槽）从未被内核处理过——
 修复方向：cred_child 的 fork 移到首个 victim 页释放后的时机窗（待设计：
 需确认 cred_jar 从 buddy 取页的时序、g_cred_kva 与 child cred 地址的重合机制）。
 
+## 八B、BTF 地面真值核对（2026-11-12）：偏移假设出局
+
+- 用户提供官方 OTA URL（8.95GB），Range 流式提取（.ota-work/ 有脚本）：
+  zip64 中央目录 → payload.bin（STORED @61）→ manifest（一加 proto 变体：
+  **partitions=13、operations=8、new_partition_info=7、dst_extents=6**，inner
+  标准；XZ blob 尾部 index/footer 截断需按规范合成补齐）→ boot_ota.img 192MB
+  （ANDROID! v4，内核 34.2MiB，版本串逐字吻合 g7cdd565ce1ed）
+- BTF 解析（btfparse2.py）：**task_struct.cred=2104(0x838)✓、task_struct
+  size=4800✓、cred.uid@4✓、cred object_size=176（slab bytes_alloc 184 ✓）**
+- **DeepSeek"偏移错"假设出局；三设备一致=BTF 真值**
+- 特异点：该内核 BTF **kind 12/13（FUNC_PROTO/FUNC）互换**（匿名 FUNC_PROTO
+  全部以 kind 13 编码）——外部解析器易翻车的坑
+- 结论：失败根因收窄到 **fork 时机假设** → 2.0.34（fork 移到 victim 页释放后）
+
+## 八C、2.0.33（e2cf327）：运行前脏状态预检 + 一键恢复
+
+- runChain 顶部读 /sys/fs/selinux/enforce：Permissive → 自动恢复尝试（shell
+  写回，通常被拒）→ 失败 exit=9 终止
+- app 侧 exit 8/9 → 恢复卡（三语 strings）→ 确认后 Shizuku `svc power reboot`
+  （PendingConfirmation.DirtyRecovery + Shizuku.newProcess）
+
 ## 九、GK 日志链路速查（2.0.23+）
 
 native stdout（`[stage] …` 行 + `\x1eC98260_STATUS` 控制行）→ relayLog（tail 日志文件，
