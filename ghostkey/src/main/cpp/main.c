@@ -77,8 +77,17 @@ int main(int argc, char **argv) {
      * 2.0.26 诊断：入口打印身份，用于区分"崩在 execve 内"与"execve 已完成"。
      * 日志 fd 跨 execve 保留，这里能写进同一份 run-*.log。 */
     if (!strcmp(command, "--exec-ok")) {
+        struct timespec linger;
         dprintf(STDOUT_FILENO, "[eok] entered uid=%d euid=%d\n",
             (int)getuid(), (int)geteuid());
+        /* 2.0.29：不再立即退出——plant 协议要求 reap status=9（killer 的 SIGKILL
+         * 必须赢得竞争），否则 one_uaf 永远返回 -1、installed/验证永不可达
+         * （第 8 次实测 hit=1 五连发却零 installed 即此死锁）。睡 1.5s 让 200ms
+         * 处的 SIGKILL 落在一个已完成 execve 的普通进程上（干净击杀，不复现
+         * mid-exec panic）；killer 失常时自退兜底，不会悬挂。 */
+        linger.tv_sec = 1;
+        linger.tv_nsec = 500000000;
+        nanosleep(&linger, NULL);
         _exit(0);
     }
 
