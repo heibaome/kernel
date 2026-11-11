@@ -264,6 +264,26 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
             }
 
             //
+            // 2.0.35 参照 GL（attack/ops.cpp "restoring enforcing"）：permissive
+            // 是 late-load 的窗口，KSU 加载完成后立即写回 Enforcing——成功路径的
+            // 出门打扫。经 rootd socket 以 uid=0 执行；失败仅告警（脏状态预检
+            // 会在下一轮拦截）。
+            //
+            if (ksuLive) {
+                runCatching {
+                    val rcE = runStep(
+                        listOf(nativeLib.absolutePath, "su", "-c",
+                            "echo 1 > /sys/fs/selinux/enforce"),
+                        workDir, env, logFile, profileBlob, VERIFY_TIMEOUT_SEC,
+                    )
+                    callback?.onLog(
+                        if (rcE == 0) "<b> SELinux restored to Enforcing (GL-style cleanup)"
+                        else "<s> warn: restore enforcing rc=$rcE",
+                    )
+                }
+            }
+
+            //
             //
             if (ksuLive) {
                 callback?.onLog("<b> KernelSU provides the real root channel")
