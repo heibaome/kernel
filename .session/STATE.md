@@ -80,3 +80,24 @@ native stdout（`[stage] …` 行 + `\x1eC98260_STATUS` 控制行）→ relayLog
 onLog 直传）→ 双写：执行 sheet（FormatLogUseCase 染色）+ `RunLogStore` `run-*.log`
 （历史面板读它）。染色规则：stage ok 绿/failed 红/degraded 黄/running 蓝，
 error 关键词红、`warn:` 黄、其余灰；`<s>/<b>/<->/<k>` 沿用 GL 语义。
+
+## 八、假设 B：旧 profile 被 BTF 错位污染（用户提出，已核实机制，待数据裁决）
+
+- 内置资产**无** `6.1.157-android14-11-o-g7cdd565ce1ed` → 该机 profile 来自 boot.img 导入
+- `UserProfileStore`（filesDir/user_profiles/*.conf，HOCON 文本）无版本戳/生成器标记/
+  失效机制，升级后原样读回
+- `Profile.missingRequiredFields()`（Profile.kt L52-57）只判键存在，0 偏移可通过
+- blob v4（magic "C982"，KernelProfileSerializer L10-12）只定布局不定值域
+- 日志反推 `KITIMER_NODE = 0x78`（off=0x1410 − victim 低 13 位 0x1398），非零但未证实正确
+- **与"时序空窗"假设不互斥**（污染 NODE → backfill 命中错页 → 同样注入阶段 panic）
+- 裁决材料：`Download/ghostlock-debug-log/<时间>/profile.conf`（第3/4次）；
+  或用 2.0.23 重导 boot-ace5-trimmed.img 对比成员偏移
+- 若确认，2.0.24 修复（L 级，需计划文档+用户批准）：① generator-version 戳 + 拒绝执行
+  旧 profile；② missingRequiredFields 值域校验（拒绝 0、上界检查）；双侧一致性约束
+
+## 九、竞品情报（2026-11-11 查证）
+
+- 月虹提权助手（yhyun.asia，闭源，QQ/网盘分发）：按机型打包提权 payload + KernelSU
+  一键化，ColorOS 17 / OnePlus 13 生态已跑通（DroidWin 提及 Rootline）；公开 PoC 家族
+  为 CVE-2026-43499 futex PI UAF（= 本仓库 backend 占位组件），OnePlus/OPPO/realme
+  锁 BL。对本项目仅形态参考，无可借代码。
