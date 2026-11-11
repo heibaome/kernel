@@ -75,9 +75,12 @@ data class ProfileDocument(
         fun num(name: String): Long? = getLong("offset.$name") ?: getLong(name)
         fun hex(v: Long): String = "0x${v.toString(16)}"
 
+        /** 合法内核符号地址：Long 域为 [SYMBOL_ADDRESS_MIN, -1]（0xFFFF 开头的负数）。 */
+        fun isKernelAddress(v: Long): Boolean = v >= SYMBOL_ADDRESS_MIN && v < 0
+
         for (p in SYMBOL_ADDRESS_FIELDS) {
             val v = getLong(p) ?: continue
-            if (v < SYMBOL_ADDRESS_MIN) errors += "$p=${hex(v)}: 符号地址不在内核地址空间"
+            if (!isKernelAddress(v)) errors += "$p=${hex(v)}: 符号地址不在内核地址空间"
         }
 
         num("task_struct_size")?.let { v ->
@@ -95,7 +98,10 @@ data class ProfileDocument(
             }
         }
         num("cred_uid")?.let { v ->
-            if (v <= 0 || v >= CRED_MEMBER_MAX) errors += "cred_uid=${hex(v)}: 超出合理范围"
+            when {
+                v <= 0 -> errors += "cred_uid=${hex(v)}: 偏移为 0（BTF 错位典型产物）"
+                v >= CRED_MEMBER_MAX -> errors += "cred_uid=${hex(v)}: 超出合理范围"
+            }
         }
         val kitimerSize = num("kitimer_size") ?: KITIMER_SIZE_DEFAULT
         num("kitimer_size")?.let { v ->
@@ -117,7 +123,8 @@ data class ProfileDocument(
             if (v <= 0 || v >= CRED_MEMBER_MAX) errors += "$p=${hex(v)}: 超出合理范围"
         }
         num("task_alloc_link")?.let { v ->
-            if (v > 0 && v < SYMBOL_ADDRESS_MIN) {
+            // 0 = 可选缺省；非 0 必须是内核符号地址
+            if (v != 0L && !isKernelAddress(v)) {
                 errors += "task_alloc_link=${hex(v)}: 符号地址不在内核地址空间"
             }
         }
