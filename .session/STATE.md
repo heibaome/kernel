@@ -98,25 +98,31 @@
   1. `Download/ghostlock-debug-log/<时间>/profile.conf`（第3/4/5次）直接验尸
   2. 用 2.0.24 重导 boot-ace5-trimmed.img 对比（新版写入 schema_version=2）
 
-## 七、第 5 次实测结论（2.0.25，2026-11-11 12:30，日志已存 .uploads/实测.log）
+## 七、第 5-8 次实测结论（2.0.25→2.0.28）
 
-- **假设 B（profile 污染）排除**：本次跑的用户 profile 通过了 2.0.25 执行门
-  （admissible = schema_version=2 + 值域全过；resolve() 按 admissible 过滤已验证接线正确），
-  BTF 修复后的干净档依旧 panic
-- **panic 点与第 4 次完全一致**：`[killer] SIGKILL old=16177 errno=3` 为最后一行，
-  崩在 killer→exec-ok 毫秒级窗口内
-- **stream_backfill 首次产出证据**：`pairs=4 node_base=0x890820 off=0xde0`
-  （第 4 次缺的 page_freed 类证据这次拿到；第 4 次是 2.0.22 日志乱序丢行所致）
-- mlockall errno=12 仍在；arming=trigger 仍在；日志链路（2.0.23 修复）完全健康
-- run1（12:30:26）在 calib_b order1_pfns=126 后被中断重跑，与 panic 无关
+- **第5次（2.0.25）**：假设 B（profile 污染）排除——通过执行门（schema_version=2+值域）
+  的干净档依旧 panic；崩点同第 4 次（killer→exec-ok 窗口）
+- **第6次（2.0.26 诊断）**：根因锁定——`[killer] sigkill sent` → `page_freed=1` → 崩。
+  SIGKILL 跑赢刚 exec 的新镜像 → exit 清扫 2048 k_itimer → 栽赃页被释放 →
+  exec/cred 路径踩已释放页。附证：mlockall rlim=65536/65536（uid2000 限额 64KB，
+  mlockall 永远失败，只能定向 mlock）
+- **第7次（2.0.27 宽限期 200ms）**：exec 桥 panic 根治；**SELinux enforce=0 达成**；
+  arming 自动切 direct；新崩点 plant attempt 2 早期
+- **第8次（2.0.28 泄漏修复+早期标记）**：plant 连撑 5 轮完整 cycle 不崩；
+  **每轮 writes hit=1（forged cred 喷洒全命中）**；但发现**协议死锁**——
+  宽限期让新镜像总在 200ms 内自退 → reap 恒 status=0 → one_uaf 恒 -1 →
+  `[cred] installed`/ask_child 验证永不可达。协议成功路径 = reap status=9（SIGKILL 赢）
+- 中间崩溃（第7次 attempt2、第8次 attempt6 mid-spray）低频偶发，低优先级；
+  栽赃页生命周期保护留作候选
 
-## 八、下一步（2.0.26 计划，按优先级）
+## 八、2.0.29（50b0b95，等 CI）：恢复协议时序
 
-1. **崩溃窗口细粒度日志**：killer 之后 / waitpid / exec-ok 各步间加 `[exec_body]` 打印，
-   下次 panic 的最后一行直接指认崩前最后一个内核操作
-2. **mlockall 修复**：rootd/root child 侧再锁，或改走 /proc/pid/mem 直写避免依赖子进程页锁定
-3. **arming direct 修复**：`armed=trigger enable=?` 查 enable 写失败原因（SELinux？）
-4. pstore 自动快照（成功运行后取证上一次 panic）保持候选
+`--exec-ok` 睡 1.5s 再自退——SIGKILL 在 200ms 落到已完成 execve 的活进程上
+（干净击杀，不复现第6次 mid-exec panic）→ reap status=9 → installed →
+ask_child → rooted。第 9 次判读：
+- `[cred] installed` + `[cred] answer uid=0` = **提权成功**（后接 rootd→ksud 交接）
+- `[cred] still uid=2000` = cred 槽位重定向未生效（查 node[2]=target 链路）
+- mid-spray 崩再现 = 查喷洒页生命周期
 
 ## 九、GK 日志链路速查（2.0.23+）
 
