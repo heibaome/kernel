@@ -39,8 +39,11 @@ class ProfileRepository(context: Context) {
      * 调用方根据 [UserProfileStore] 的存储态给出「重新导入」指引。
      */
     fun resolve(release: String): KernelProfile? {
-        val user = store.listComplete()
-        user.firstOrNull { it.release == release && it.admissible }?.let { return it }
+        // 在 StoredProfile 层做执行门（admissible 含 schema_version 与值域双检），
+        // 再转 KernelProfile；listComplete() 返回的已是 KernelProfile，无法承载门信息。
+        store.list()
+            .firstOrNull { it.release == release && it.admissible }
+            ?.let { return runCatching { it.document.toKernelProfile() }.getOrNull() }
         builtin.match(release)?.let { return it }
         return null
     }
