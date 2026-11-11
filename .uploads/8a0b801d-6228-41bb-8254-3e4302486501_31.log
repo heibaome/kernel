@@ -1,0 +1,527 @@
+# 第 1 次运行
+# 开始：2026-11-11 22:52:13
+# 设备：ä¸å  Ace 5
+# 内核：6.1.157-android14-11-o-g7cdd565ce1ed
+# Profile：6.1.157-android14-11-o-g7cdd565ce1ed
+# 结果：中断 · 耗时 —
+
+[22:52:13] <b> ---- 第 1 次运行开始 ----
+[22:52:13] <s> checking Shizuku status...
+[22:52:13] <s> Shizuku connected: uid=2000
+[22:52:13] <b> kernel release: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:52:13] <b> kernel check passed: OnePlus PKG110 (product=PKG110, device=OP5D2BL1, kernel=6.1.157-android14-11-o-g7cdd565ce1ed)
+[22:52:13] <b> matched kernel profile: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:52:13] <b> profile serialized (308 bytes)
+[22:52:13] <s> binding UserService (version 3)...
+[22:52:14] <b> UserService connected
+[22:52:14] <s> Shizuku ready: uid=2000 seccomp=0
+[22:52:14] <s> ksud staged from manager [me.weishu.kernelsu]: /data/local/tmp/ksud (size=4990848)
+[22:52:14] <s> ksud: /data/local/tmp/ksud
+[22:52:14] <b> cleaning up stale sockets and stop files
+[22:52:14] <s> stale cleanup: 2 node(s) still present (unlink denied while SELinux is Enforcing)
+[22:52:14] [*] stage 1/5 calib_a: running
+[22:52:14] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:52:14] [calib_a] collecting call sites (timer_link=0xffffffc00844bc08, probe 2048 / hold 2s)
+[22:52:14] [kaslr] made=2048
+[22:52:16] [kaslr] done
+[22:52:21] [calib_a] captured raw=888832 bytes
+[22:52:21] [calib_a] candidate call sites: 4
+[22:52:21] [calib_a]   site=0xffffffe70544bc08 count=2049 slide=0x26fd000000
+[22:52:21] [calib_a] note: slide not 2MiB-aligned (0x26fcc743e0), keep as candidate
+[22:52:21] [calib_a]   site=0xffffffe7050bffe8 count=102 slide=0x26fcc743e0
+[22:52:21] [calib_a] note: slide not 2MiB-aligned (0x26fcc7362c), keep as candidate
+[22:52:21] [calib_a]   site=0xffffffe7050bf234 count=60 slide=0x26fcc7362c
+[22:52:21] [calib_a] note: slide not 2MiB-aligned (0x26fcd56a8c), keep as candidate
+[22:52:21] [calib_a]   site=0xffffffe7051a2694 count=10 slide=0x26fcd56a8c
+[22:52:21] [calib_a] slide = 0x26fd000000  _text = 0xffffffe77d000000
+[22:52:21] C98260_SLIDE=0x26fd000000
+[22:52:21] [calib_a] done
+[22:52:21] <b> KASLR slide = 0x26fd000000
+[22:52:21] [*] stage 1/5 calib_a: ok
+[22:52:21] [*] stage 2/5 calib_b: running
+[22:52:21] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:52:21] [calib_b] slide=0x26fd000000 expected call site=0xffffffe70544bc08
+[22:52:22] [kaslr] made=4096
+[22:52:23] [kaslr] done
+[22:52:24] [calib_b] order1_pfns=123
+[22:52:32] [calib_b] raw=3059712 bytes
+[22:52:32] [calib_b] k_itimer=4098 slab_pages=134
+[22:52:32] <b> linear map base = 0xffffff7f80000000 (confidence 123/134)
+[22:52:32] [*] stage 2/5 calib_b: ok
+[22:52:32] [*] stage 3/5 inject: running
+[22:52:32] <s> oom_score_adj(pid=27955): write=ok, now=-1000
+[22:52:32] <b> injection started (pid held by native), waiting for rootd...
+[22:52:32] [calib_b] page_offset = 0xffffff7f80000000 (score=123/134)
+[22:52:32] C98260_PAGE_OFFSET=0xffffff7f80000000
+[22:52:32] [calib_b] done
+[22:52:32] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:52:32] [mode] daemon_exit=1
+[22:52:32] [slide] 0x26fd000000
+[22:52:32] [mode] fast=1
+[22:52:32] [config] PAGE=0xffffff7f80000000 TIMER=0xffffffc00844bc08 CRED=0xffffffc008059450 SELINUX=0xffffffc00a29bda0
+[22:52:32] [id] uid=2000 euid=2000 gid=2000
+[22:52:32] [SELinux] enforce=1
+[22:52:32] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:33] [task] pid=27955 by=size site=0xffffffe7053e7400 ptr=0xffffff89da733840 req=4800 alloc=4800
+[22:52:33] [child-cred] waiting pid=27956
+[22:52:33] [child-cred] warn: mlockall errno=12 rlim=65536/65536
+[22:52:33] [task] hits=1 by_site=0 by_size=1 foreign=0 other=341 task=0xffffff89da733840 raw=28672 cpus=8 size=4800..5824 want_site=0 max_alloc=4800@0xffffffe7053e7400
+[22:52:33] [selinux] attempt 1/12 target=0xffffffe70729bd99
+[22:52:33] [uaf] child=27957 spawned
+[22:52:33] [race_child] enter pid=27957
+[22:52:33] [race_child] vmas ready pid=27957
+[22:52:33] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:35] [uaf] captured=2048 chosen=0xffffff8919586c60 raw=258048
+[22:52:35] [stream_backfill] tile align=0 off=0xcd8
+[22:52:35] [stream_backfill] pairs=4 node_base=0x999586 off=0xcd8
+[22:52:35] [exec_body] begin tid=27966
+[22:52:36] [killer] old=27966 gone
+[22:52:36] [killer] sigkill sent tgid=27957 errno=3
+[22:52:36] [stream_backfill] page_freed=1
+[22:52:37] [stream_backfill] hit pfn=0x999586
+[22:52:37] [stream_backfill] writes=400 hit=1
+[22:52:37] [uaf] child=27957 code=2 status=9
+[22:52:37] [cycle] ms=4521 result=ok fast=1
+[22:52:37] [uaf] reaped status=9
+[22:52:37] [SELinux] enforce=1
+[22:52:37] [selinux] attempt 2/12 target=0xffffffe70729bd99
+[22:52:37] [uaf] child=27994 spawned
+[22:52:37] [race_child] enter pid=27994
+[22:52:37] [race_child] vmas ready pid=27994
+[22:52:37] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:39] [uaf] captured=2048 chosen=0xffffff89d97e7290 raw=266240
+[22:52:39] [stream_backfill] tile align=0 off=0x1308
+[22:52:39] [exec_body] begin tid=27999
+[22:52:39] [stream_backfill] pairs=4 node_base=0xa597e6 off=0x1308
+[22:52:40] [killer] old=27999 gone
+[22:52:40] [eok] entered uid=2000 euid=2000
+[22:52:40] [killer] sigkill sent tgid=27994 errno=3
+[22:52:40] [stream_backfill] page_freed=1
+[22:52:41] [stream_backfill] hit pfn=0xa597e6
+[22:52:41] [stream_backfill] writes=400 hit=1
+[22:52:41] [uaf] child=27994 code=2 status=9
+[22:52:41] [cycle] ms=3914 result=ok fast=1
+[22:52:41] [uaf] reaped status=9
+[22:52:41] [SELinux] enforce=1
+[22:52:41] [selinux] attempt 3/12 target=0xffffffe70729bd99
+[22:52:41] [uaf] child=28298 spawned
+[22:52:41] [race_child] enter pid=28298
+[22:52:41] [race_child] vmas ready pid=28298
+[22:52:41] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:43] [uaf] captured=2048 chosen=0xffffff80367e4840 raw=253952
+[22:52:43] [stream_backfill] tile align=0 off=0x8b8
+[22:52:43] [exec_body] begin tid=28307
+[22:52:43] [stream_backfill] pairs=4 node_base=0xb67e4 off=0x8b8
+[22:52:43] [killer] old=28307 gone
+[22:52:44] [eok] entered uid=2000 euid=2000
+[22:52:44] [killer] sigkill sent tgid=28298 errno=3
+[22:52:44] [stream_backfill] page_freed=1
+[22:52:45] [stream_backfill] hit pfn=0xb67e4
+[22:52:45] [stream_backfill] writes=400 hit=1
+[22:52:45] [uaf] child=28298 code=2 status=9
+[22:52:45] [cycle] ms=4071 result=ok fast=1
+[22:52:45] [uaf] reaped status=9
+[22:52:45] [SELinux] enforce=1
+[22:52:45] [selinux] attempt 4/12 target=0xffffffe70729bd99
+[22:52:45] [uaf] child=28335 spawned
+[22:52:45] [race_child] enter pid=28335
+[22:52:45] [race_child] vmas ready pid=28335
+[22:52:45] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:47] [uaf] captured=2048 chosen=0xffffff8923b03bd8 raw=253952
+[22:52:47] [stream_backfill] tile align=0 off=0x1c50
+[22:52:47] [exec_body] begin tid=28342
+[22:52:47] [stream_backfill] pairs=4 node_base=0x9a3b02 off=0x1c50
+[22:52:48] [killer] old=28342 gone
+[22:52:48] [eok] entered uid=2000 euid=2000
+[22:52:48] [killer] sigkill sent tgid=28335 errno=3
+[22:52:48] [stream_backfill] page_freed=1
+[22:52:49] [stream_backfill] hit pfn=0x9a3b02
+[22:52:49] [stream_backfill] writes=400 hit=1
+[22:52:49] [uaf] child=28335 code=2 status=9
+[22:52:49] [cycle] ms=3774 result=ok fast=1
+[22:52:49] [uaf] reaped status=9
+[22:52:49] [SELinux] enforce=1
+[22:52:49] [selinux] attempt 5/12 target=0xffffffe70729bd99
+[22:52:49] [uaf] child=28379 spawned
+[22:52:49] [race_child] enter pid=28379
+[22:52:49] [race_child] vmas ready pid=28379
+[22:52:49] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:51] [uaf] captured=2048 chosen=0xffffff804e70b5a8 raw=249856
+[22:52:51] [stream_backfill] tile align=0 off=0x1620
+[22:52:51] [exec_body] begin tid=28384
+[22:52:51] [stream_backfill] pairs=4 node_base=0xce70a off=0x1620
+[22:52:51] [killer] old=28384 gone
+[22:52:51] [eok] entered uid=2000 euid=2000
+[22:52:52] [killer] sigkill sent tgid=28379 errno=3
+[22:52:52] [stream_backfill] page_freed=1
+[22:52:52] [stream_backfill] hit pfn=0xce70a
+[22:52:52] [stream_backfill] writes=200 hit=1
+[22:52:52] [uaf] child=28379 code=2 status=9
+[22:52:52] [cycle] ms=3242 result=ok fast=1
+[22:52:52] [uaf] reaped status=9
+[22:52:52] [SELinux] enforce=1
+[22:52:52] [selinux] attempt 6/12 target=0xffffffe70729bd99
+[22:52:52] [uaf] child=28407 spawned
+[22:52:52] [race_child] enter pid=28407
+[22:52:52] [race_child] vmas ready pid=28407
+[22:52:52] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:54] [uaf] captured=2048 chosen=0xffffff80315c96b0 raw=253952
+[22:52:54] [stream_backfill] tile align=0 off=0x1728
+[22:52:54] [exec_body] begin tid=28412
+[22:52:54] [stream_backfill] pairs=4 node_base=0xb15c8 off=0x1728
+[22:52:55] [killer] old=28412 gone
+[22:52:55] [eok] entered uid=2000 euid=2000
+[22:52:55] [stream_backfill] page_freed=1
+[22:52:55] [killer] sigkill sent tgid=28407 errno=3
+[22:52:56] [stream_backfill] hit pfn=0xb15c8
+[22:52:56] [stream_backfill] writes=400 hit=1
+[22:52:56] [uaf] child=28407 code=2 status=9
+[22:52:56] [cycle] ms=3815 result=ok fast=1
+[22:52:56] [uaf] reaped status=9
+[22:52:56] [SELinux] enforce=1
+[22:52:56] [selinux] attempt 7/12 target=0xffffffe70729bd99
+[22:52:56] [uaf] child=28700 spawned
+[22:52:56] [race_child] enter pid=28700
+[22:52:56] [race_child] vmas ready pid=28700
+[22:52:56] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:52:58] [uaf] captured=2048 chosen=0xffffff89eb4fd290 raw=253952
+[22:52:58] [stream_backfill] tile align=0 off=0x1308
+[22:52:58] [exec_body] begin tid=28712
+[22:52:58] [stream_backfill] pairs=4 node_base=0xa6b4fc off=0x1308
+[22:52:58] [killer] old=28712 gone
+[22:52:58] [eok] entered uid=2000 euid=2000
+[22:52:59] [killer] sigkill sent tgid=28700 errno=3
+[22:52:59] [stream_backfill] page_freed=1
+[22:53:00] [stream_backfill] hit pfn=0xa6b4fc
+[22:53:00] [stream_backfill] writes=400 hit=1
+[22:53:00] [uaf] child=28700 code=2 status=9
+[22:53:00] [cycle] ms=3717 result=ok fast=1
+[22:53:00] [uaf] reaped status=9
+[22:53:00] [SELinux] enforce=1
+[22:53:00] [selinux] attempt 8/12 target=0xffffffe70729bd99
+[22:53:00] [uaf] child=28742 spawned
+[22:53:00] [race_child] enter pid=28742
+[22:53:00] [race_child] vmas ready pid=28742
+[22:53:00] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:53:02] [uaf] captured=2048 chosen=0xffffff804bd5a420 raw=253952
+[22:53:02] [stream_backfill] tile align=0 off=0x498
+[22:53:02] [stream_backfill] pairs=4 node_base=0xcbd5a off=0x498
+[22:53:02] [exec_body] begin tid=28749
+[22:53:02] [killer] old=28749 gone
+[22:53:02] [killer] sigkill sent tgid=28742 errno=3
+[22:53:02] [stream_backfill] page_freed=1
+[22:53:03] [stream_backfill] hit pfn=0xcbd5a
+[22:53:03] [stream_backfill] writes=200 hit=1
+[22:53:03] [uaf] child=28742 code=2 status=9
+[22:53:03] [cycle] ms=3279 result=ok fast=1
+[22:53:03] [uaf] reaped status=9
+[22:53:03] [SELinux] enforce=0
+[22:53:03] [selinux] already permissive
+[22:53:03] [cred] plant attempt 1/12
+[22:53:03] [uaf] child=28781 spawned
+[22:53:03] [race_child] enter pid=28781
+[22:53:03] [race_child] vmas ready pid=28781
+[22:53:03] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:05] [uaf] captured=2048 chosen=0xffffff89e030a000 raw=258048
+[22:53:05] [cred] node=0xffffff89e030a078 task+cred=0xffffff89da734078 off=0x78
+[22:53:05] [exec_body] begin tid=28788
+[22:53:05] [stream_backfill] pairs=4 node_base=0xa6030a off=0x78
+[22:53:05] [killer] old=28788 gone
+[22:53:06] [eok] entered uid=2000 euid=2000
+[22:53:06] [killer] sigkill sent tgid=28781 errno=3
+[22:53:06] [stream_backfill] page_freed=1
+[22:53:07] [stream_backfill] hit pfn=0xa6030a
+[22:53:07] [stream_backfill] writes=400 hit=1
+[22:53:07] [uaf] child=28781 code=2 status=9
+[22:53:07] [cycle] ms=3710 result=ok fast=1
+[22:53:07] [uaf] reaped status=9
+[22:53:07] [cred] installed at 0xffffff89e030a078
+[22:53:07] [cred] proc State:	S (sleeping)
+[22:53:07] [cred] proc Uid:	2000	2000	2000	2000
+[22:53:07] [cred] proc CapEff:	0000000000000000
+[22:53:07] [cred] self uid=2000 euid=2000
+[22:53:07] [uaf] child=28819 spawned
+[22:53:07] [race_child] enter pid=28819
+[22:53:07] [race_child] vmas ready pid=28819
+[22:53:07] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:09] [uaf] captured=2048 chosen=0xffffff803eeb6210 raw=253952
+[22:53:09] [stream_backfill] tile align=0 off=0x288
+[22:53:09] [exec_body] begin tid=28825
+[22:53:09] [stream_backfill] pairs=4 node_base=0xbeeb6 off=0x288
+[22:53:09] [killer] old=28825 gone
+[22:53:09] [eok] entered uid=2000 euid=2000
+[22:53:09] [killer] sigkill sent tgid=28819 errno=3
+[22:53:09] [stream_backfill] page_freed=1
+[22:53:10] [stream_backfill] hit pfn=0xbeeb6
+[22:53:10] [stream_backfill] writes=400 hit=1
+[22:53:10] [uaf] child=28819 code=2 status=9
+[22:53:10] [cycle] ms=3820 result=ok fast=1
+[22:53:10] [uaf] reaped status=9
+[22:53:10] [uaf] child=29132 spawned
+[22:53:10] [race_child] enter pid=29132
+[22:53:11] [race_child] vmas ready pid=29132
+[22:53:11] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:13] [uaf] captured=2048 chosen=0xffffff8042213398 raw=249856
+[22:53:13] [stream_backfill] tile align=0 off=0x1410
+[22:53:13] [stream_backfill] pairs=4 node_base=0xc2212 off=0x1410
+[22:53:13] [exec_body] begin tid=29146
+[22:53:13] [killer] old=29146 gone
+[22:53:13] [killer] sigkill sent tgid=29132 errno=3
+[22:53:13] [stream_backfill] page_freed=1
+[22:53:14] [stream_backfill] hit pfn=0xc2212
+[22:53:14] [stream_backfill] writes=400 hit=1
+[22:53:15] [uaf] child=29132 code=2 status=9
+[22:53:15] [cycle] ms=4112 result=ok fast=1
+[22:53:15] [uaf] reaped status=9
+[22:53:15] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:15] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:15] [cred] still uid=2000 euid=2000
+[22:53:15] [cred] plant attempt 2/12
+[22:53:15] [uaf] child=29181 spawned
+[22:53:15] [race_child] enter pid=29181
+[22:53:15] [race_child] vmas ready pid=29181
+[22:53:15] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:17] [uaf] captured=2048 chosen=0xffffff895b5979c8 raw=253952
+[22:53:17] [cred] node=0xffffff895b597a40 task+cred=0xffffff89da734078 off=0x1a40
+[22:53:17] [exec_body] begin tid=29192
+[22:53:17] [stream_backfill] pairs=4 node_base=0x9db596 off=0x1a40
+[22:53:17] [killer] old=29192 gone
+[22:53:17] [eok] entered uid=2000 euid=2000
+[22:53:17] [killer] sigkill sent tgid=29181 errno=3
+[22:53:17] [stream_backfill] page_freed=1
+[22:53:18] [stream_backfill] hit pfn=0x9db596
+[22:53:18] [stream_backfill] writes=400 hit=1
+[22:53:18] [uaf] child=29181 code=2 status=9
+[22:53:18] [cycle] ms=3765 result=ok fast=1
+[22:53:18] [uaf] reaped status=9
+[22:53:18] [cred] installed at 0xffffff895b597a40
+[22:53:18] [cred] proc State:	S (sleeping)
+[22:53:18] [cred] proc Uid:	2000	2000	2000	2000
+[22:53:18] [cred] proc CapEff:	0000000000000000
+[22:53:18] [cred] self uid=2000 euid=2000
+[22:53:18] [uaf] child=29226 spawned
+[22:53:18] [race_child] enter pid=29226
+[22:53:18] [race_child] vmas ready pid=29226
+[22:53:18] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:21] [uaf] captured=2048 chosen=0xffffff89e8e52420 raw=249856
+[22:53:21] [stream_backfill] tile align=0 off=0x498
+[22:53:21] [exec_body] begin tid=29234
+[22:53:21] [stream_backfill] pairs=4 node_base=0xa68e52 off=0x498
+[22:53:21] [killer] old=29234 gone
+[22:53:21] [killer] sigkill sent tgid=29226 errno=3
+[22:53:21] [stream_backfill] page_freed=1
+[22:53:22] [stream_backfill] hit pfn=0xa68e52
+[22:53:22] [stream_backfill] writes=200 hit=1
+[22:53:22] [uaf] child=29226 code=2 status=9
+[22:53:22] [cycle] ms=3206 result=ok fast=1
+[22:53:22] [uaf] reaped status=9
+[22:53:22] [uaf] child=29256 spawned
+[22:53:22] [race_child] enter pid=29256
+[22:53:22] [race_child] vmas ready pid=29256
+[22:53:22] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:24] [uaf] captured=2048 chosen=0xffffff88e8487de8 raw=253952
+[22:53:24] [stream_backfill] tile align=0 off=0x1e60
+[22:53:24] [exec_body] begin tid=29263
+[22:53:24] [stream_backfill] pairs=4 node_base=0x968486 off=0x1e60
+[22:53:24] [killer] old=29263 gone
+[22:53:24] [killer] sigkill sent tgid=29256 errno=3
+[22:53:24] [stream_backfill] page_freed=1
+[22:53:25] [stream_backfill] hit pfn=0x968486
+[22:53:25] [stream_backfill] writes=400 hit=1
+[22:53:25] [uaf] child=29256 code=2 status=9
+[22:53:25] [cycle] ms=3706 result=ok fast=1
+[22:53:25] [uaf] reaped status=9
+[22:53:25] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:25] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:25] [cred] still uid=2000 euid=2000
+[22:53:25] [cred] plant attempt 3/12
+[22:53:25] [uaf] child=29535 spawned
+[22:53:25] [race_child] enter pid=29535
+[22:53:25] [race_child] vmas ready pid=29535
+[22:53:25] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:27] [uaf] captured=2048 chosen=0xffffff89203af398 raw=253952
+[22:53:27] [cred] node=0xffffff89203af410 task+cred=0xffffff89da734078 off=0x1410
+[22:53:27] [stream_backfill] pairs=4 node_base=0x9a03ae off=0x1410
+[22:53:27] [exec_body] begin tid=29553
+[22:53:28] [killer] old=29553 gone
+[22:53:28] [eok] entered uid=2000 euid=2000
+[22:53:28] [killer] sigkill sent tgid=29535 errno=3
+[22:53:28] [stream_backfill] page_freed=1
+[22:53:29] [stream_backfill] hit pfn=0x9a03ae
+[22:53:29] [stream_backfill] writes=400 hit=1
+[22:53:29] [uaf] child=29535 code=2 status=9
+[22:53:29] [cycle] ms=3723 result=ok fast=1
+[22:53:29] [uaf] reaped status=9
+[22:53:29] [cred] installed at 0xffffff89203af410
+[22:53:29] [cred] proc State:	S (sleeping)
+[22:53:29] [cred] proc Uid:	2000	2000	2000	2000
+[22:53:29] [cred] proc CapEff:	0000000000000000
+[22:53:29] [cred] self uid=2000 euid=2000
+[22:53:29] [uaf] child=29589 spawned
+[22:53:29] [race_child] enter pid=29589
+[22:53:29] [race_child] vmas ready pid=29589
+[22:53:29] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:31] [uaf] captured=2048 chosen=0xffffff80351e9de8 raw=253952
+[22:53:31] [stream_backfill] tile align=0 off=0x1e60
+[22:53:31] [exec_body] begin tid=29596
+[22:53:31] [stream_backfill] pairs=4 node_base=0xb51e8 off=0x1e60
+[22:53:31] [killer] old=29596 gone
+[22:53:32] [eok] entered uid=2000 euid=2000
+[22:53:32] [killer] sigkill sent tgid=29589 errno=3
+[22:53:32] [stream_backfill] page_freed=1
+[22:53:33] [stream_backfill] hit pfn=0xb51e8
+[22:53:33] [stream_backfill] writes=400 hit=1
+[22:53:33] [uaf] child=29589 code=2 status=9
+[22:53:33] [cycle] ms=3753 result=ok fast=1
+[22:53:33] [uaf] reaped status=9
+[22:53:33] [uaf] child=29631 spawned
+[22:53:33] [race_child] enter pid=29631
+[22:53:33] [race_child] vmas ready pid=29631
+[22:53:33] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:35] [uaf] captured=2048 chosen=0xffffff803f063290 raw=253952
+[22:53:35] [stream_backfill] tile align=0 off=0x1308
+[22:53:35] [stream_backfill] pairs=4 node_base=0xbf062 off=0x1308
+[22:53:35] [exec_body] begin tid=29639
+[22:53:35] [killer] old=29639 gone
+[22:53:35] [killer] sigkill sent tgid=29631 errno=3
+[22:53:35] [stream_backfill] page_freed=1
+[22:53:36] [stream_backfill] hit pfn=0xbf062
+[22:53:36] [stream_backfill] writes=200 hit=1
+[22:53:36] [uaf] child=29631 code=2 status=9
+[22:53:36] [cycle] ms=3249 result=ok fast=1
+[22:53:36] [uaf] reaped status=9
+[22:53:36] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:36] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:36] [cred] still uid=2000 euid=2000
+[22:53:36] [cred] plant attempt 4/12
+[22:53:36] [uaf] child=29655 spawned
+[22:53:36] [race_child] enter pid=29655
+[22:53:36] [race_child] vmas ready pid=29655
+[22:53:36] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:38] [uaf] captured=2048 chosen=0xffffff88d57e7080 raw=253952
+[22:53:38] [cred] node=0xffffff88d57e70f8 task+cred=0xffffff89da734078 off=0x10f8
+[22:53:38] [stream_backfill] pairs=4 node_base=0x9557e6 off=0x10f8
+[22:53:38] [exec_body] begin tid=29662
+[22:53:39] [killer] old=29662 gone
+[22:53:39] [eok] entered uid=2000 euid=2000
+[22:53:39] [killer] sigkill sent tgid=29655 errno=3
+[22:53:39] [stream_backfill] page_freed=1
+[22:53:40] [stream_backfill] hit pfn=0x9557e6
+[22:53:40] [stream_backfill] writes=400 hit=1
+[22:53:40] [uaf] child=29655 code=2 status=9
+[22:53:40] [cycle] ms=3684 result=ok fast=1
+[22:53:40] [uaf] reaped status=9
+[22:53:40] [cred] installed at 0xffffff88d57e70f8
+[22:53:40] [cred] proc State:	S (sleeping)
+[22:53:40] [cred] proc Uid:	2000	2000	2000	2000
+[22:53:40] [cred] proc CapEff:	0000000000000000
+[22:53:40] [cred] self uid=2000 euid=2000
+[22:53:40] [uaf] child=29826 spawned
+[22:53:40] [race_child] enter pid=29826
+[22:53:40] [race_child] vmas ready pid=29826
+[22:53:40] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:42] [uaf] captured=2048 chosen=0xffffff89e73a78c0 raw=258048
+[22:53:42] [stream_backfill] tile align=0 off=0x1938
+[22:53:42] [exec_body] begin tid=29882
+[22:53:42] [stream_backfill] pairs=4 node_base=0xa673a6 off=0x1938
+[22:53:42] [killer] old=29882 gone
+[22:53:42] [killer] sigkill sent tgid=29826 errno=3
+[22:53:42] [stream_backfill] page_freed=1
+[22:53:43] [stream_backfill] hit pfn=0xa673a6
+[22:53:43] [stream_backfill] writes=400 hit=1
+[22:53:43] [uaf] child=29826 code=2 status=9
+[22:53:43] [cycle] ms=3713 result=ok fast=1
+[22:53:43] [uaf] reaped status=9
+[22:53:43] [uaf] child=29952 spawned
+[22:53:43] [race_child] enter pid=29952
+[22:53:44] [race_child] vmas ready pid=29952
+[22:53:44] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:46] [uaf] captured=2048 chosen=0xffffff89e9c98420 raw=249856
+[22:53:46] [stream_backfill] tile align=0 off=0x498
+[22:53:46] [stream_backfill] pairs=4 node_base=0xa69c98 off=0x498
+[22:53:46] [exec_body] begin tid=29957
+[22:53:46] [killer] old=29957 gone
+[22:53:46] [eok] entered uid=2000 euid=2000
+[22:53:46] [killer] sigkill sent tgid=29952 errno=3
+[22:53:46] [stream_backfill] page_freed=1
+[22:53:47] [stream_backfill] hit pfn=0xa69c98
+[22:53:47] [stream_backfill] writes=200 hit=1
+[22:53:47] [uaf] child=29952 code=2 status=9
+[22:53:47] [cycle] ms=3365 result=ok fast=1
+[22:53:47] [uaf] reaped status=9
+[22:53:47] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:47] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:47] [cred] still uid=2000 euid=2000
+[22:53:47] [cred] plant attempt 5/12
+[22:53:47] [uaf] child=30005 spawned
+[22:53:47] [race_child] enter pid=30005
+[22:53:47] [race_child] vmas ready pid=30005
+[22:53:47] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:49] [uaf] captured=2048 chosen=0xffffff804f6c4108 raw=253952
+[22:53:49] [cred] node=0xffffff804f6c4180 task+cred=0xffffff89da734078 off=0x180
+[22:53:49] [exec_body] begin tid=30014
+[22:53:49] [stream_backfill] pairs=4 node_base=0xcf6c4 off=0x180
+[22:53:49] [killer] old=30014 gone
+[22:53:49] [eok] entered uid=2000 euid=2000
+[22:53:49] [killer] sigkill sent tgid=30005 errno=3
+[22:53:49] [stream_backfill] page_freed=1
+[22:53:51] [stream_backfill] hit pfn=0xcf6c4
+[22:53:51] [stream_backfill] writes=400 hit=1
+[22:53:51] [uaf] child=30005 code=2 status=9
+[22:53:51] [cycle] ms=3873 result=ok fast=1
+[22:53:51] [uaf] reaped status=9
+[22:53:51] [cred] installed at 0xffffff804f6c4180
+[22:53:51] [cred] proc State:	S (sleeping)
+[22:53:51] [cred] proc Uid:	2000	2000	2000	2000
+[22:53:51] [cred] proc CapEff:	0000000000000000
+[22:53:51] [cred] self uid=2000 euid=2000
+[22:53:51] [uaf] child=30040 spawned
+[22:53:51] [race_child] enter pid=30040
+[22:53:51] [race_child] vmas ready pid=30040
+[22:53:51] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:53] [uaf] captured=2048 chosen=0xffffff8975dde000 raw=258048
+[22:53:53] [stream_backfill] tile align=0 off=0x78
+[22:53:53] [exec_body] begin tid=30047
+[22:53:53] [stream_backfill] pairs=4 node_base=0x9f5dde off=0x78
+[22:53:53] [killer] old=30047 gone
+[22:53:53] [eok] entered uid=2000 euid=2000
+[22:53:53] [killer] sigkill sent tgid=30040 errno=3
+[22:53:53] [stream_backfill] page_freed=1
+[22:53:54] [stream_backfill] hit pfn=0x9f5dde
+[22:53:54] [stream_backfill] writes=400 hit=1
+[22:53:55] [uaf] child=30040 code=2 status=9
+[22:53:55] [cycle] ms=3936 result=ok fast=1
+[22:53:55] [uaf] reaped status=9
+[22:53:55] [uaf] child=30168 spawned
+[22:53:55] [race_child] enter pid=30168
+[22:53:55] [race_child] vmas ready pid=30168
+[22:53:55] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:53:57] [uaf] captured=2048 chosen=0xffffff8959c79ce0 raw=274432
+[22:53:57] [stream_backfill] tile align=0 off=0x1d58
+[22:53:57] [exec_body] begin tid=30245
+[22:53:57] [stream_backfill] pairs=4 node_base=0x9d9c78 off=0x1d58
+[22:53:57] [killer] old=30245 gone
+[22:53:57] [killer] sigkill sent tgid=30168 errno=3
+[22:53:57] [stream_backfill] page_freed=1
+[22:53:58] [stream_backfill] hit pfn=0x9d9c78
+[22:53:58] [stream_backfill] writes=400 hit=1
+[22:53:58] [uaf] child=30168 code=2 status=9
+[22:53:58] [cycle] ms=3671 result=ok fast=1
+[22:53:58] [uaf] reaped status=9
+[22:53:58] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:58] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:53:58] [cred] still uid=2000 euid=2000
+[22:53:58] [cred] plant attempt 6/12
+[22:53:58] [uaf] child=30360 spawned
+[22:53:58] [race_child] enter pid=30360
+[22:53:58] [race_child] vmas ready pid=30360
+[22:53:58] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:54:00] [uaf] captured=2048 chosen=0xffffff80368a7290 raw=249856
+[22:54:01] [cred] node=0xffffff80368a7308 task+cred=0xffffff89da734078 off=0x1308
+[22:54:01] [exec_body] begin tid=30367
+[22:54:01] [stream_backfill] pairs=4 node_base=0xb68a6 off=0x1308
+[22:54:01] [killer] old=30367 gone
+[22:54:01] [killer] sigkill sent tgid=30360 errno=3
+[22:54:01] [stream_backfill] page_freed=1
+[22:54:02] [stream_backfill] hit pfn=0xb68a6
+[22:54:02] [stream_backfill] writes=400 hit=1

