@@ -1421,6 +1421,13 @@ class GhostlockViewModel(
         send(GhostlockEffect.Toast(R.string.copied))
     }
 
+    /** 历史日志详情：一键复制全文（panic 重启后取 run-*.log 的主要出口）。 */
+    fun copyRunHistory() {
+        val text = state.value.runHistoryBody ?: return
+        send(GhostlockEffect.Clipboard(text))
+        send(GhostlockEffect.Toast(R.string.copied))
+    }
+
     /** GhostKey boot.img import: the host activity owns the SAF picker. */
     fun requestGhostKeyBootImport() = send(GhostlockEffect.PickGhostKeyBootImg)
 

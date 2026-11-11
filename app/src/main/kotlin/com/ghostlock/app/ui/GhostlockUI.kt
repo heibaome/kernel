@@ -258,6 +258,8 @@ interface GhostlockActions {
     fun onStatusClick()
     fun onCloseExecutionSheet()
     fun onCopyLogs()
+    /** 历史日志详情：复制 run-*.log 全文到剪贴板。 */
+    fun onCopyRunHistory()
     /** 执行 sheet：打开落盘的历史运行日志列表。 */
     fun onShowRunHistory()
     fun onOpenRunLogSheet()
@@ -618,20 +620,33 @@ private fun GhostKeyRunHistoryPanel(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = actions::onCloseRunHistory)
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = MiuixIcons.Back,
-                    contentDescription = stringResource(R.string.gk_run_history_back),
-                    tint = MiuixTheme.colorScheme.onBackground,
-                )
-                Text(
-                    text = stringResource(R.string.gk_run_history_back),
-                    style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.primary,
-                )
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = actions::onCloseRunHistory),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Back,
+                        contentDescription = stringResource(R.string.gk_run_history_back),
+                        tint = MiuixTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = stringResource(R.string.gk_run_history_back),
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
+                }
+                IconButton(onClick = actions::onCopyRunHistory) {
+                    Icon(
+                        imageVector = MiuixIcons.Copy,
+                        contentDescription = stringResource(R.string.action_copy),
+                        tint = MiuixTheme.colorScheme.onBackground,
+                    )
+                }
             }
             SelectionContainer {
                 Text(
