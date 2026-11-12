@@ -1036,17 +1036,37 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
         }.getOrDefault(false)
 
     /**
-     * ksud 解析（v1.0.9 起）三级链：
+     * ksud 解析（2.0.38 起参考版优先）：
      *
-     *  1. PackageManager 扫描（主路径，认 libksud.so 文件不认包名——自编译 fork
-     *     包名不可预知）：nativeLibraryDir 直拷，版本跟管理器走；
-     *  2. KSUD_STAGE shell 脚本（回退）：pm path 逐候选包名 + unzip；
-     *  3. APK 内置 assets/ksu/ksud（最后兜底，KMI 集冻结在打包时刻）。
+     *  1. APK 内置 assets/ksu/ksud（参考构建 6402736B，内置本攻击流的
+     *     late-load 支持与 KMI 模块集）——第 15 次实测证明管理器版
+     *     （4990848B）late-load 后模块不注册，参考版才是配套构建；
+     *  2. PackageManager 扫描 / 首页所选管理器的 libksud.so（回退：参考版
+     *     缺失或解压失败时，保持旧行为）。
      *
-     * 任意外部来源 ksud 经 CVE98260_KSUD 传给原生 find_ksud（第一优先候选）。
-     * 不动原生 C：ksu.c 大小校验只打日志、不拦截。
+     * 无论来源，统一 stage 到 KsudStage.TARGET，经 CVE98260_KSUD 传给
+     * 原生 find_ksud（第一优先候选）。
      */
     private fun resolveKsud(workDir: File, callback: ICve98260Callback?, preferredPackage: String?): File? {
+        val bundled = extractKsud(workDir)
+        if (bundled != null && bundled.length() > 0L) {
+            val staged = runCatching {
+                val target = File(KsudStage.TARGET)
+                bundled.copyTo(target, overwrite = true)
+                target.setExecutable(true, false)
+                target
+            }.getOrNull()
+            if (staged != null && staged.length() > 0L) {
+                callback?.onLog(
+                    "<s> ksud staged from bundled reference build: " +
+                        "${staged.absolutePath} (size=${staged.length()})",
+                )
+                return staged
+            }
+            callback?.onLog("<s> warn: bundled ksud staging failed; falling back to manager")
+        } else {
+            callback?.onLog("<s> warn: bundled ksud missing; falling back to manager")
+        }
         /* 首页选择的根管理器优先（与 GL 的 resolveKsudPath 语义一致）：
          * 用户指定的包若带 libksud.so，直接取它，保证模块加载落在所选管理器；
          * 未选择/不可用时回落到既有扫描链（内置表 → 全量扫描）。 */
