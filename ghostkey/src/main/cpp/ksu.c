@@ -267,6 +267,36 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "fi\n");
 	fprintf(f, "\n");
 	/*
+	 * 2.0.40 diagnostics: runs 15/17 showed late-load failing SILENTLY with
+	 * BOTH ksud builds (manager 4990848 and reference 6402736) while ksud
+	 * itself printed nothing - rc=0, no module. Before blaming the builds,
+	 * answer: does the binary execute at all, which subcommands exist, what
+	 * does the kernel say about module loading (sig enforcement, dmesg), and
+	 * what errno does a manual insmod of the extracted .ko return?
+	 */
+	fprintf(f, "echo '[ksu] diag begin' >> \"$LOG\"\n");
+	fprintf(f, "echo \"[ksu] uname=$(uname -r)\" >> \"$LOG\"\n");
+	fprintf(f, "echo \"[ksu] ksud ELF magic: $(od -An -tx1 -N4 \"$KSUD\" 2>&1)\" >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" --version >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo \"[ksu] --version rc=$?\" >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" -h >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo \"[ksu] -h rc=$?\" >> \"$LOG\"\n");
+	fprintf(f, "echo \"[ksu] sig_enforce=$(cat /sys/module/module/parameters/sig_enforce 2>&1)\" >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] dmesg tail:' >> \"$LOG\"\n");
+	fprintf(f, "dmesg 2>&1 | tail -12 >> \"$LOG\"\n");
+	fprintf(f, "KO=$(find /data/local/tmp /data/adb /data/misc /cache -name 'kernelsu*.ko' -o -name 'ksu*.ko' 2>/dev/null | head -1)\n");
+	fprintf(f, "echo \"[ksu] ko found: ${KO:-none}\" >> \"$LOG\"\n");
+	fprintf(f, "if [ -n \"$KO\" ]; then\n");
+	fprintf(f, "  echo \"[ksu] vermagic: $(modinfo \"$KO\" 2>/dev/null | grep vermagic || head -c 120 \"$KO\" | tail -c 60)\" >> \"$LOG\"\n");
+	fprintf(f, "  insmod \"$KO\" 2>&1 >> \"$LOG\"\n");
+	fprintf(f, "  echo \"[ksu] manual insmod rc=$?\" >> \"$LOG\"\n");
+	fprintf(f, "  sleep 1\n");
+	fprintf(f, "  LIVE=$(live)\n");
+	fprintf(f, "  echo \"[ksu] live after manual insmod=$LIVE\" >> \"$LOG\"\n");
+	fprintf(f, "fi\n");
+	fprintf(f, "echo '[ksu] diag end' >> \"$LOG\"\n");
+	fprintf(f, "\n");
+	/*
 	 * Do NOT start the ksud daemon from here.
 	 *
 	 * This script runs through rootd, i.e. as uid 0 with the *injected forged*
