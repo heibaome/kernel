@@ -1874,10 +1874,20 @@ static int ask_child(unsigned *uid, unsigned *euid)
 	unsigned char go = 1;
 	ssize_t n;
 	if (kill(g_cred_child_pid, 0) != 0) {
-		dprintf(STDOUT_FILENO, "[cred] child %d is dead errno=%d\n",
-			g_cred_child_pid, errno);
-		log_proc_uid(g_cred_child_pid);
-		return -1;
+		if (errno == EPERM) {
+			/* 2.0.37（第 14 次实测）：EPERM = 子进程活着，但它的 uid 已被
+			 * 写零成 0——uid 2000 的父进程从此无权对它发任何信号。这不是
+			 * 死亡，恰恰是提权成功的信号！绝不能在这里返回，必须继续把
+			 * 查询送进管道，child 才会应答并 fork rootd。 */
+			dprintf(STDOUT_FILENO,
+				"[cred] child %d refuses our signals (EPERM): its cred is root now\n",
+				g_cred_child_pid);
+		} else {
+			dprintf(STDOUT_FILENO, "[cred] child %d is dead errno=%d\n",
+				g_cred_child_pid, errno);
+			log_proc_uid(g_cred_child_pid);
+			return -1;
+		}
 	}
 	fcntl(g_report[0], F_SETFL, O_NONBLOCK);
 	while (read(g_report[0], buf, sizeof(buf)) > 0)
