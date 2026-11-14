@@ -184,24 +184,6 @@ static int modules_have_kernelsu(void)
 	return 0;
 }
 
-/* 2.0.41：判定 takeover 日志里是否出现预检判死标记（skip late-load），
- * 让 native 轮询在"注定失败"的场景提前收场，不再空烧 15s。 */
-static int log_contains(const char *path, const char *needle)
-{
-	char line[512];
-	FILE *f = fopen(path, "r");
-	if (!f)
-		return 0;
-	while (fgets(line, sizeof(line), f)) {
-		if (strstr(line, needle)) {
-			fclose(f);
-			return 1;
-		}
-	}
-	fclose(f);
-	return 0;
-}
-
 /*
  * Flush the stage log to the block device.
  *
@@ -266,49 +248,18 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "  exit 0\n");
 	fprintf(f, "fi\n");
 	fprintf(f, "\n");
-	/*
-	 * 2.0.41 pre-check (read-only). The script runs as uid=0 via rootd's
-	 * fork+exec, so /proc/self/status shows the cap bitmap AFTER exec-time
-	 * regrant - this doubles as the decisive experiment between the two
-	 * late-load theories: CapEff bit 16 (CAP_SYS_MODULE) present = the
-	 * module path is at least permitted; all-zero = init_module is EPERM
-	 * no matter what ksud does. CONFIG_MODULE_SIG_FORCE via /proc/config.gz
-	 * (present only when kernel config exposure is enabled).
-	 */
-	fprintf(f, "CAP_EFF=$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status 2>/dev/null)\n");
-	fprintf(f, "CAP_PRM=$(sed -n 's/^CapPrm:[[:space:]]*//p' /proc/self/status 2>/dev/null)\n");
-	fprintf(f, "echo \"[ksu] rootd CapEff=${CAP_EFF:-unknown} CapPrm=${CAP_PRM:-unknown}\" >> \"$LOG\"\n");
-	fprintf(f, "CAN_MOD=1\n");
-	fprintf(f, "if [ -n \"$CAP_EFF\" ]; then\n");
-	fprintf(f, "  E=$(( 0x$CAP_EFF & 0x10000 ))\n");
-	fprintf(f, "  P=$(( 0x${CAP_PRM:-0} & 0x10000 ))\n");
-	fprintf(f, "  [ \"$E\" -eq 0 ] && [ \"$P\" -eq 0 ] && CAN_MOD=0\n");
-	fprintf(f, "fi\n");
-	fprintf(f, "SIG_FORCE=no\n");
-	fprintf(f, "if [ -r /proc/config.gz ] && zcat /proc/config.gz 2>/dev/null | grep -q '^CONFIG_MODULE_SIG_FORCE=y'; then\n");
-	fprintf(f, "  SIG_FORCE=yes\n");
-	fprintf(f, "fi\n");
-	fprintf(f, "echo \"[ksu] pre-check can_mod=$CAN_MOD sig_force=$SIG_FORCE\" >> \"$LOG\"\n");
+	/* Attempt 1: the GUI-preferred single-parameter form (PC: ksu_activate.sh:132). */
+	fprintf(f, "echo \"[ksu] try: late-load --kmi $KMI\" >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" late-load --kmi \"$KMI\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "sync\n");
-	fprintf(f, "\n");
-	/* Attempt 1: the GUI-preferred single-parameter form (PC: ksu_activate.sh:132).
-	 * 2.0.41: gated on the pre-check; RUST_LOG=trace makes ksud's internal
-	 * KMI/payload-matching decision visible instead of silent rc=0. */
-	fprintf(f, "if [ \"$CAN_MOD\" = 1 ] && [ \"$SIG_FORCE\" = no ]; then\n");
-	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI\" >> \"$LOG\"\n");
-	fprintf(f, "  RUST_LOG=trace \"$KSUD\" late-load --kmi \"$KMI\" >> \"$LOG\" 2>&1\n");
-	fprintf(f, "  echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
-	fprintf(f, "  sync\n");
-	fprintf(f, "  LIVE=$(live)\n");
-	fprintf(f, "  echo \"[ksu] live=$LIVE\" >> \"$LOG\"\n");
-	fprintf(f, "else\n");
-	fprintf(f, "  echo '[ksu] skip late-load: module loading unavailable (can_mod=$CAN_MOD sig_force=$SIG_FORCE)' >> \"$LOG\"\n");
-	fprintf(f, "fi\n");
+	fprintf(f, "LIVE=$(live)\n");
+	fprintf(f, "echo \"[ksu] live=$LIVE\" >> \"$LOG\"\n");
 	fprintf(f, "\n");
 	/* Attempt 2 only when attempt 1 did not register the module (PC:136-140). */
-	fprintf(f, "if [ \"$LIVE\" != yes ] && [ \"$CAN_MOD\" = 1 ] && [ \"$SIG_FORCE\" = no ]; then\n");
+	fprintf(f, "if [ \"$LIVE\" != yes ]; then\n");
 	fprintf(f, "  echo '[ksu] try: late-load (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
-	fprintf(f, "  RUST_LOG=trace \"$KSUD\" late-load >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  \"$KSUD\" late-load >> \"$LOG\" 2>&1\n");
 	fprintf(f, "  echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "  sync\n");
 	fprintf(f, "  LIVE=$(live)\n");
@@ -331,8 +282,8 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "\"$KSUD\" -h >> \"$LOG\" 2>&1\n");
 	fprintf(f, "echo \"[ksu] -h rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "echo \"[ksu] sig_enforce=$(cat /sys/module/module/parameters/sig_enforce 2>&1)\" >> \"$LOG\"\n");
-	fprintf(f, "echo '[ksu] dmesg tail (wide):' >> \"$LOG\"\n");
-	fprintf(f, "dmesg 2>&1 | tail -120 >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] dmesg tail:' >> \"$LOG\"\n");
+	fprintf(f, "dmesg 2>&1 | tail -12 >> \"$LOG\"\n");
 	fprintf(f, "KO=$(find /data/local/tmp /data/adb /data/misc /cache -name 'kernelsu*.ko' -o -name 'ksu*.ko' 2>/dev/null | head -1)\n");
 	fprintf(f, "echo \"[ksu] ko found: ${KO:-none}\" >> \"$LOG\"\n");
 	fprintf(f, "if [ -n \"$KO\" ]; then\n");
@@ -453,14 +404,6 @@ int ksu_takeover_main(int argc, char **argv)
 	for (i = 0; i < 15; i++) {
 		if (modules_have_kernelsu()) {
 			already = 1;
-			break;
-		}
-		/* 2.0.41：预检判死时提前收场（给脚本 2s 落盘），不再空烧 15s。 */
-		if (i >= 2 && log_contains(log, "[ksu] skip late-load")) {
-			fprintf(stdout,
-				"[ksu] pre-check verdict: module loading unavailable on this kernel (see %s)\n",
-				log);
-			ksu_sync();
 			break;
 		}
 		sleep_ms(1000);
