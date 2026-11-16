@@ -133,7 +133,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
         if (ksud != null) callback?.onLog("<s> ksud: ${ksud.absolutePath}")
         else callback?.onLog("<s> warn: ksud not available, KSU takeover will be skipped")
 
-        val env = baseEnv(workDir, ksud)
+        val env = baseEnv(workDir, ksud, managerPackage)
 
         val tailer = Thread({ relayLog(logFile, callback) }, "c98260-tailer").apply {
             isDaemon = true
@@ -422,7 +422,7 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
     }
 
 
-    private fun baseEnv(workDir: File, ksud: File?): Map<String, String> =
+    private fun baseEnv(workDir: File, ksud: File?, managerPackage: String?): Map<String, String> =
         buildMap {
             put("CVE98260_HOME", workDir.absolutePath)
             put("TMPDIR", workDir.absolutePath)
@@ -432,6 +432,10 @@ class Cve98260UserService(private val context: Context) : ICve98260UserService.S
             put("PC98260_SOCK", socketPath)
             put("PC98260_STOP_FILE", stopFilePath)
             ksud?.let { put("CVE98260_KSUD", it.absolutePath) }
+            // 2.0.47: ksud late-load requires --package-name <manager pkg>
+            // (plus --allow-shell) or it silently no-ops; the manager package
+            // chosen in the UI is the one the module must bind to.
+            managerPackage?.takeIf { it.isNotBlank() }?.let { put("CVE98260_KSU_PKG", it) }
             put("CVE98260_KSU_LOG", File(workDir, "ksu_takeover.log").absolutePath)
         }
 

