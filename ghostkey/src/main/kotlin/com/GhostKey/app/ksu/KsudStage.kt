@@ -7,8 +7,10 @@ package com.GhostKey.app.ksu
  *  - KernelSU 系管理器把 ksud 可执行文件伪装成 `libksud.so` 打进 APK，
  *    安装后落在 `<apk目录>/lib/arm64/libksud.so`（即 nativeLibraryDir）；
  *  - ksud 内置多套 KMI 的 kernelsu.ko（android15-6.6_kernelsu.ko 等），
- *    `late-load --kmi <KMI>` 时自动选内置对应 ko，并自动替换 vermagic，
- *    因此「同一 KMI 任意构建号」的内核都能加载；
+ *    `late-load --kmi <KMI> --allow-shell [--package-name <管理器>]` 时
+ *    自动选内置对应 ko 并自动替换 vermagic（--allow-shell 缺失会静默
+ *    no-op；--package-name 仅在 UI 选定了管理器时传入），因此「同一
+ *    KMI 任意构建号」的内核都能加载；
  *  - 从**设备已装管理器**提取 ksud，版本天然与管理器配套 —— 管理器升级即
  *    获得新 KMI 支持，无需重打本 APK（对比：内置固定 ksud 的 KMI 集冻结在打包时刻）。
  *

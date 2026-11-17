@@ -10,6 +10,9 @@
  *   2) after a successful load the kernel forces SELinux back to Enforcing, and rootd's unlabeled socket
  *      drops the link, so the script does no final verification; the criterion is moved to the parent, which uses
  *      'whether kernelsu appears in /proc/modules'.
+ *   3) 2.0.47+, device + OnePlus16 write-up: late-load silently no-ops
+ *      without --allow-shell; --package-name is required only when a
+ *      manager package is selected. RUST_LOG/--verbose un-mute ksud.
  *
  * Therefore this module does not run ksud directly (this process is shell uid 2000); instead it
  * generates a takeover script and runs it via rootd's unix socket as uid=0 -- equivalent to run.py's
@@ -249,20 +252,18 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "  exit 0\n");
 	fprintf(f, "fi\n");
 	fprintf(f, "\n");
-	/* Attempt 1: --kmi form. With the manager package set, the mandatory
-	 * --allow-shell/--package-name pair goes along (the reference PC flow's
-	 * bare invocation is exactly the silent rc=0 no-op we saw on device).
-	 * 2.0.48: RUST_LOG=trace + --verbose - the bundled ksud 3.3.1 uses
-	 * env_logger and prints NOTHING without them, so a silent rc=0 no-op is
-	 * indistinguishable from any other failure. Run 23 proved the mandatory
-	 * pair alone still no-ops silently. */
+	/* Attempt 1: --kmi form. --allow-shell is MANDATORY regardless of the
+	 * package (run 23 / stub-ksud test: without it ksud silently no-ops);
+	 * --package-name only when the UI has an actual manager selected -
+	 * "自动" (auto) leaves PKG empty and binding to a package would then
+	 * be wrong, but allow_shell must always go along. */
 	fprintf(f, "export RUST_LOG=trace\n");
 	fprintf(f, "if [ -n \"$PKG\" ]; then\n");
 	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --allow-shell --package-name $PKG --verbose\" >> \"$LOG\"\n");
 	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$PKG\" --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "else\n");
-	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --verbose\" >> \"$LOG\"\n");
-	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --verbose >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --allow-shell --verbose\" >> \"$LOG\"\n");
+	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "fi\n");
 	fprintf(f, "echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "sync\n");
@@ -276,8 +277,8 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "    echo '[ksu] try: late-load --allow-shell --package-name '$PKG' --verbose (no kmi, ksud picks the embedded KMI)' >> \"$LOG\"\n");
 	fprintf(f, "    \"$KSUD\" late-load --allow-shell --package-name \"$PKG\" --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "  else\n");
-	fprintf(f, "    echo '[ksu] try: late-load --verbose (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
-	fprintf(f, "    \"$KSUD\" late-load --verbose >> \"$LOG\" 2>&1\n");
+	fprintf(f, "    echo '[ksu] try: late-load --allow-shell --verbose (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
+	fprintf(f, "    \"$KSUD\" late-load --allow-shell --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "  fi\n");
 	fprintf(f, "  echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "  sync\n");
