@@ -251,13 +251,18 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "\n");
 	/* Attempt 1: --kmi form. With the manager package set, the mandatory
 	 * --allow-shell/--package-name pair goes along (the reference PC flow's
-	 * bare invocation is exactly the silent rc=0 no-op we saw on device). */
+	 * bare invocation is exactly the silent rc=0 no-op we saw on device).
+	 * 2.0.48: RUST_LOG=trace + --verbose - the bundled ksud 3.3.1 uses
+	 * env_logger and prints NOTHING without them, so a silent rc=0 no-op is
+	 * indistinguishable from any other failure. Run 23 proved the mandatory
+	 * pair alone still no-ops silently. */
+	fprintf(f, "export RUST_LOG=trace\n");
 	fprintf(f, "if [ -n \"$PKG\" ]; then\n");
-	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --allow-shell --package-name $PKG\" >> \"$LOG\"\n");
-	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$PKG\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --allow-shell --package-name $PKG --verbose\" >> \"$LOG\"\n");
+	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$PKG\" --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "else\n");
-	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI\" >> \"$LOG\"\n");
-	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "  echo \"[ksu] try: late-load --kmi $KMI --verbose\" >> \"$LOG\"\n");
+	fprintf(f, "  \"$KSUD\" late-load --kmi \"$KMI\" --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "fi\n");
 	fprintf(f, "echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "sync\n");
@@ -268,11 +273,11 @@ static int write_takeover_script(const char *path, const char *ksud,
 	 * ksud picks the embedded KMI. Same mandatory pair when PKG is set. */
 	fprintf(f, "if [ \"$LIVE\" != yes ]; then\n");
 	fprintf(f, "  if [ -n \"$PKG\" ]; then\n");
-	fprintf(f, "    echo '[ksu] try: late-load --allow-shell --package-name '$PKG' (no kmi, ksud picks the embedded KMI)' >> \"$LOG\"\n");
-	fprintf(f, "    \"$KSUD\" late-load --allow-shell --package-name \"$PKG\" >> \"$LOG\" 2>&1\n");
+	fprintf(f, "    echo '[ksu] try: late-load --allow-shell --package-name '$PKG' --verbose (no kmi, ksud picks the embedded KMI)' >> \"$LOG\"\n");
+	fprintf(f, "    \"$KSUD\" late-load --allow-shell --package-name \"$PKG\" --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "  else\n");
-	fprintf(f, "    echo '[ksu] try: late-load (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
-	fprintf(f, "    \"$KSUD\" late-load >> \"$LOG\" 2>&1\n");
+	fprintf(f, "    echo '[ksu] try: late-load --verbose (no args, ksud picks the embedded KMI)' >> \"$LOG\"\n");
+	fprintf(f, "    \"$KSUD\" late-load --verbose >> \"$LOG\" 2>&1\n");
 	fprintf(f, "  fi\n");
 	fprintf(f, "  echo \"[ksu] rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "  sync\n");
@@ -296,6 +301,12 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "\"$KSUD\" -h >> \"$LOG\" 2>&1\n");
 	fprintf(f, "echo \"[ksu] -h rc=$?\" >> \"$LOG\"\n");
 	fprintf(f, "echo \"[ksu] sig_enforce=$(cat /sys/module/module/parameters/sig_enforce 2>&1)\" >> \"$LOG\"\n");
+	/* 2.0.48: authoritative subcommand signatures - whether late-load
+	 * accepts a module path, and insmod's kallsyms-based loader usage. */
+	fprintf(f, "echo '[ksu] late-load -h:' >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" late-load -h >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo '[ksu] insmod -h:' >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" insmod -h >> \"$LOG\" 2>&1\n");
 	fprintf(f, "echo '[ksu] dmesg tail:' >> \"$LOG\"\n");
 	fprintf(f, "dmesg 2>&1 | tail -12 >> \"$LOG\"\n");
 	fprintf(f, "KO=$(find /data/local/tmp /data/adb /data/misc /cache -name 'kernelsu*.ko' -o -name 'ksu*.ko' 2>/dev/null | head -1)\n");
