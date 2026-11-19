@@ -308,6 +308,29 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "\"$KSUD\" late-load -h >> \"$LOG\" 2>&1\n");
 	fprintf(f, "echo '[ksu] insmod -h:' >> \"$LOG\"\n");
 	fprintf(f, "\"$KSUD\" insmod -h >> \"$LOG\" 2>&1\n");
+	/* 2.0.52: run 7 proved ksud dies BEFORE its first log line, so the
+	 * remaining windows are (a) logcat - Android ksud builds log via
+	 * android_logger, which stdout redirection never sees, (b) the kernel
+	 * config - without KALLSYMS/BTF the kallsyms-based loader cannot work
+	 * at all and a silent exit would be its "correct" behaviour, (c) the
+	 * KSU kernel nodes the ksud::feature probe depends on. All three are
+	 * cheaper to capture than to argue about. Order matters: logcat's ring
+	 * buffer wraps, so it goes BEFORE anything slow. */
+	fprintf(f, "echo '[ksu] debug -h:' >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" debug -h >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo \"[ksu] debug -h rc=$?\" >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] kernel -h:' >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" kernel -h >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo '[ksu] feature -h:' >> \"$LOG\"\n");
+	fprintf(f, "\"$KSUD\" feature -h >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo '[ksu] kernel config (if available):' >> \"$LOG\"\n");
+	fprintf(f, "zcat /proc/config.gz 2>/dev/null | grep -E 'CONFIG_(MODULES|MODULE_SIG|KALLSYMS|KALLSYMS_ALL|BTF)' >> \"$LOG\" 2>&1 || echo '[ksu] /proc/config.gz unavailable' >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] /proc/sys/kernel nodes (KSU feature probe targets):' >> \"$LOG\"\n");
+	fprintf(f, "ls /proc/sys/kernel/ 2>&1 | head -30 >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] logcat ksud/Rust filter:' >> \"$LOG\"\n");
+	fprintf(f, "logcat -d -s ksud RustStdoutStderr 2>&1 | tail -100 >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] logcat module mentions:' >> \"$LOG\"\n");
+	fprintf(f, "logcat -d -v time 2>&1 | grep -iE 'ksud|kernelsu|late.load|init_module' | tail -60 >> \"$LOG\"\n");
 	fprintf(f, "echo '[ksu] dmesg tail:' >> \"$LOG\"\n");
 	fprintf(f, "dmesg 2>&1 | tail -12 >> \"$LOG\"\n");
 	fprintf(f, "KO=$(find /data/local/tmp /data/adb /data/misc /cache -name 'kernelsu*.ko' -o -name 'ksu*.ko' 2>/dev/null | head -1)\n");
@@ -320,6 +343,28 @@ static int write_takeover_script(const char *path, const char *ksud,
 	fprintf(f, "  LIVE=$(live)\n");
 	fprintf(f, "  echo \"[ksu] live after manual insmod=$LIVE\" >> \"$LOG\"\n");
 	fprintf(f, "fi\n");
+	/* 2.0.52: GLM's diversion experiment, automated - a third late-load
+	 * under `time`. Run 7 showed both attempts returning near-instantly
+	 * (22s total for the whole handover incl. 15s poll + diag): real
+	 * kallsyms parsing costs hundreds of ms at minimum, so a sub-100ms
+	 * real time here CONVICTS the pre-log entry check as the exit point.
+	 * Then the filesystem forensics: how far did ksud get - did it extract
+	 * the embedded .ko, create the /data/adb/ksu skeleton? Independent of
+	 * any logging channel. */
+	fprintf(f, "echo '[ksu] manual timed late-load (third attempt):' >> \"$LOG\"\n");
+	fprintf(f, "if [ -n \"$PKG\" ]; then\n");
+	fprintf(f, "  { time \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell --package-name \"$PKG\"; } >> \"$LOG\" 2>&1\n");
+	fprintf(f, "else\n");
+	fprintf(f, "  { time \"$KSUD\" late-load --kmi \"$KMI\" --allow-shell; } >> \"$LOG\" 2>&1\n");
+	fprintf(f, "fi\n");
+	fprintf(f, "echo \"[ksu] manual late-load rc=$?\" >> \"$LOG\"\n");
+	fprintf(f, "sync\n");
+	fprintf(f, "LIVE=$(live)\n");
+	fprintf(f, "echo \"[ksu] live after manual=$LIVE\" >> \"$LOG\"\n");
+	fprintf(f, "echo '[ksu] fs forensics /data/local/tmp:' >> \"$LOG\"\n");
+	fprintf(f, "ls -la /data/local/tmp/ >> \"$LOG\" 2>&1\n");
+	fprintf(f, "echo '[ksu] fs forensics /data/adb/ksu:' >> \"$LOG\"\n");
+	fprintf(f, "ls -laR /data/adb/ksu >> \"$LOG\" 2>&1\n");
 	fprintf(f, "echo '[ksu] diag end' >> \"$LOG\"\n");
 	fprintf(f, "\n");
 	/*
